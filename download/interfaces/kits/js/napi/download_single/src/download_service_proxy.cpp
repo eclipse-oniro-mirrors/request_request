@@ -41,11 +41,11 @@ uint32_t DownloadServiceProxy::Request(const DownloadConfig &config)
     data.WriteString(config.GetTitle());
     data.WriteUint32(config.GetHeader().size());
 
-    std::map<std::string, std::string>::const_iterator it = config.GetHeader().begin();
-    while (it != config.GetHeader().end()) {
-        data.WriteString(it->first);
-        data.WriteString(it->second);
-        it++;
+    std::map<std::string, std::string>::const_iterator cit = config.GetHeader().begin();
+    while (cit != config.GetHeader().end()) {
+        data.WriteString(cit->first);
+        data.WriteString(cit->second);
+        cit++;
     }
 
     config.Dump();

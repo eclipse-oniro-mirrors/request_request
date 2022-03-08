@@ -159,13 +159,13 @@ bool DownloadTaskNapi::ParseHeader(napi_env env, napi_value configValue, Downloa
         return false;
     }
     auto names = NapiUtils::GetPropertyNames(env, header);
-    std::vector<std::string>::iterator it = names.begin();
-    while (it != names.end()) {
-        auto value = NapiUtils::GetStringPropertyUtf8(env, header, *it);
+    std::vector<std::string>::iterator nit = names.begin();
+    while (nit != names.end()) {
+        auto value = NapiUtils::GetStringPropertyUtf8(env, header, *nit);
         if (!value.empty()) {
-            config.SetHeader(NapiUtils::ToLower(*it), value);
+            config.SetHeader(NapiUtils::ToLower(*nit), value);
         }
-        it++;
+        nit++;
     }
     return true;
 }
