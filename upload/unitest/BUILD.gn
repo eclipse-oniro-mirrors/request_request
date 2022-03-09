@@ -1,0 +1,97 @@
+# Copyright (C) 2022 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#import("//base/miscservices/request/upload/upload.gni")
+import("//build/ohos.gni")
+import("//build/test.gni")
+
+module_output_path = "request/upload_service"
+
+ohos_unittest("upload_obtain_file_UT_test") {
+  module_out_path = module_output_path
+
+  sources = [
+    "src/obtain_file_test.cpp",
+    "src/mock_obtain_file.cpp",
+  ]
+
+  include_dirs = [
+    "include",
+    "//base/miscservices/request/upload/frameworks/libs/include",
+  ]
+
+  deps = [
+    "//base/miscservices/request/upload/frameworks/libs/:upload_lib",
+    "//foundation/aafwk/standard/frameworks/kits/ability/native:abilitykit_native",
+    "//foundation/aafwk/standard/interfaces/innerkits/want:want",
+    "//foundation/appexecfwk/standard/interfaces/innerkits/appexecfwk_base:appexecfwk_base",
+    "//foundation/distributedschedule/dmsfwk/interfaces/innerkits/uri:zuri",
+  ]
+
+  external_deps = [
+    "ability_runtime:ability_manager",
+  ]
+}
+
+ohos_unittest("upload_UT_test") {
+  module_out_path = module_output_path
+
+  sources = [
+    "src/upload_test.cpp",
+  ]
+
+  include_dirs = [
+    "include",
+    "//base/miscservices/request/upload/frameworks/libs/include",
+    "//foundation/appexecfwk/standard/interfaces/innerkits/libeventhandler/include",
+    "//foundation/distributedschedule/samgr/interfaces/innerkits/samgr_proxy/include",
+    "//foundation/ace/napi/interfaces/kits",
+    "//third_party/json/single_include",
+    "//third_party/node/src",
+    "//utils/system/safwk/native/include",
+    "//foundation/communication/dsoftbus/interfaces/kits/transport",
+    "//foundation/communication/dsoftbus/interfaces/kits/common",
+    "//foundation/communication/dsoftbus/interfaces/kits/bus_center",
+    "//third_party/json/include",
+    "//foundation/appexecfwk/standard/interfaces/innerkits/appexecfwk_base/include",
+    "//foundation/appexecfwk/standard/interfaces/innerkits/appexecfwk_core/include/bundlemgr",
+    "//foundation/aafwk/standard/interfaces/innerkits/ability_manager/include",
+    "//third_party/curl/include",
+    #"//foundation/aafwk/standard/frameworks/kits/appkit/native/ability_runtime/context",
+    #"//foundation/aafwk/standard/frameworks/kits/appkit/native/ability_runtime/include",
+    #"./",
+    #"//base/miscservices/request/upload/frameworks/libs/include",
+  ]
+
+  deps = [
+    "//third_party/curl/:curl",
+    "//utils/native/base:utils",
+    "//foundation/aafwk/standard/frameworks/kits/ability/native:abilitykit_native",
+    "//foundation/aafwk/standard/frameworks/kits/appkit:app_context",
+    "//foundation/distributedschedule/dmsfwk/interfaces/innerkits/uri:zuri",
+    "//foundation/aafwk/standard/interfaces/innerkits/want:want",
+    "//base/miscservices/request/upload/frameworks/libs/:upload_lib",
+  ]
+
+  external_deps = [
+    "hiviewdfx_hilog_native:libhilog",
+    "ability_runtime:runtime",
+    "ability_runtime:ability_manager",
+    "native_appdatamgr:native_appdatafwk",
+    "native_appdatamgr:native_dataability",
+    "ipc:ipc_core",
+    "ability_runtime:ability_context_native",
+    "ability_runtime:napi_base_context",
+    "native_appdatamgr:native_rdb",
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "name": "@ohos/request",
+  "description": "Provide download and upload service for 3rd party app",
+  "version": "3.1",
+  "license": "Apache License 2.0",
+  "publishAs": "code-segment",
+  "segment": {
+    "destPath": "base/miscservices/request"
+  },
+  "dirs": {},
+  "scripts": {},
+  "component": {
+    "name": "request",
+    "subsystem": "miscservices",
+    "syscap": [
+        "SystemCapability.Miscservices.download",
+        "SystemCapability.Miscservices.Upload"
+    ],
+    "features": [
+    ],
+    "adapted_system_type": [
+      "standard"
+    ],
+    "rom":"300KB",
+    "ram":"1024KB",
+    "deps": {
+    "components": [
+        "ipc",
+        "telephony_core_service",
+        "hiviewdfx_hilog_native",
+        "appexecfwk_standard",
+        "aafwk_standard",
+        "safwk",
+        "samgr_standard",
+        "window_manager",
+        "napi",
+        "utils_base"		
+    ],
+      "third_party": []
+    },
+    "build": {
+      "sub_component": [
+        "//base/miscservices/request:request_packages",
+        "//base/miscservices/request/download/ability:downloaddataability",
+        "//base/miscservices/request/download/ability:download_dataability",
+        "//base/miscservices/request/upload/frameworks/libs:upload_lib",
+        "//base/miscservices/request/upload/interfaces/kits/napi:requestability"
+      ],
+      "inner_kits": [
+      ],
+      "test": [
+        "//base/miscservices/request/upload/unitest:upload_obtain_file_UT_test",
+        "//base/miscservices/request/upload/unitest:upload_UT_test"
+      ]
+    }
+  }
+}

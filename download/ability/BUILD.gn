@@ -1,0 +1,110 @@
+# Copyright (c) 2021 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/ohos.gni")
+import("//build/lite/config/component/lite_component.gni")
+
+## Build download_dataability.hap
+ohos_hap("download_dataability") {
+  hap_profile = "./config.json"
+  shared_libraries = [ ":downloaddataability" ]
+  certificate_profile = "./signature/profile.p7b"
+  hap_name = "download_dataability"
+  part_name = "request"
+  subsystem_name = "miscservices"
+}
+
+## Build downloaddataability.so {{{
+config("downloaddataability_public_config") {
+ visibility = [ ":*" ]
+  include_dirs = [ 
+    "//third_party/node/src",
+    "include",
+  ]
+  cflags = [ ]
+}
+ 
+ohos_shared_library("downloaddataability") {
+  sources = [
+    "src/download_data_ability.cpp",
+    "src/download_database.cpp",
+    "src/uri_utils.cpp",
+    "src/file_utils.cpp",
+    "src/predicates_convert.cpp",
+    "src/common_event.cpp",
+    "src/sql_analyzer.cpp",
+    "src/db_path.cpp",
+ ]
+include_dirs=[
+    "//utils/native/base/include",
+    "//base/hiviewdfx/hilog/interfaces/native/innerkits/include",
+    "//third_party/jsoncpp",
+    "//third_party/jsoncpp/include/json",
+    "//base/account/os_account/interfaces/innerkits/ohosaccount/native/include/",
+    "//base/account/os_account/interfaces/kits/napi/distributedaccount/include/",
+    "//base/account/os_account/interfaces/innerkits/include",
+    "//foundation/aafwk/standard/interfaces/innerkits/want/include",
+    "//foundation/appexecfwk/standard/kits/appkit/native/app",
+    "//foundation/aafwk/standard/interfaces/innerkits/want/include/ohos/aafwk/content",
+    "//foundation/aafwk/standard/interfaces/innerkits/ability_manager/include",
+    "//foundation/appexecfwk/standard/interfaces/innerkits/libeventhandler/include",
+    "//foundation/aafwk/standard/services/abilitymgr/include",
+    "//foundation/appexecfwk/standard/common/log/include",
+    "//foundation/distributedschedule/dmsfwk/services/dtbschedmgr/include",
+    "//foundation/aafwk/standard/frameworks/kits/ability/native/include",
+    "//base/notification/ces_standard/interfaces/innerkits/native/include/",
+    "//base/miscservices/request/download/utils/include"
+   ]
+
+deps = [
+    "//foundation/aafwk/standard/frameworks/kits/ability/native:abilitykit_native",
+    "//utils/native/base:utils",
+    "//foundation/ace/napi:ace_napi",
+    "//third_party/jsoncpp:jsoncpp",
+    "//base/notification/ces_standard/frameworks/core:cesfwk_core",
+    "//base/notification/ces_standard/frameworks/native:cesfwk_innerkits",
+    "//base/notification/ces_standard/services:cesfwk_services",
+    "//foundation/aafwk/standard/interfaces/innerkits/want/:want",
+    "//foundation/distributedschedule/safwk/interfaces/innerkits/safwk:system_ability_fwk",
+    "//foundation/aafwk/standard/frameworks/kits/ability/native:dummy_classes",
+    "//foundation/appexecfwk/standard/common:libappexecfwk_common",
+    "//foundation/appexecfwk/standard/interfaces/innerkits/appexecfwk_base:appexecfwk_base",
+    "//foundation/appexecfwk/standard/interfaces/innerkits/appexecfwk_core:appexecfwk_core",
+    "//foundation/distributedschedule/dmsfwk/interfaces/innerkits/uri:zuri",
+    "//utils/native/base:utilsbase",
+  ]
+
+  public_configs = [ ":downloaddataability_public_config" ]
+  external_deps = [
+    "ability_runtime:ability_manager",
+    "ability_base:want",
+    "eventhandler:libeventhandler",
+    "ipc:ipc_core",
+    "ces_standard:cesfwk_innerkits",
+    "native_appdatamgr:native_appdatafwk",
+    "native_appdatamgr:native_dataability",
+    "native_appdatamgr:native_preferences",
+    "native_appdatamgr:native_rdb",
+  ]
+  if (is_standard_system) {
+    external_deps += [ "hiviewdfx_hilog_native:libhilog" ]
+  } else {
+    external_deps += [ "hilog:libhilog" ]
+  }
+
+  public_deps = []
+  relative_install_dir = "module"
+  part_name = "request"
+  subsystem_name = "miscservices"
+}
+## Build downloaddataability.so }}}
