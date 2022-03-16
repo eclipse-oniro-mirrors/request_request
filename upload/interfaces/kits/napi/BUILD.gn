@@ -32,7 +32,7 @@ config("upload_native_public_config") {
   ]
 }
 
-ohos_shared_library("requestability") {
+ohos_shared_library("request") {
   sources = [
     "src/async_call.cpp",
     "src/fail_callback.cpp",
