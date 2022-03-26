@@ -22,6 +22,8 @@
 #include "log.h"
 #include "download_common.h"
 
+static constexpr uint32_t FILE_PERMISSION = 0644;
+
 namespace OHOS::Request::Download {
 using namespace OHOS::HiviewDFX;
 
@@ -37,13 +39,13 @@ uint32_t DownloadServiceProxy::Request(const DownloadConfig &config)
     data.WriteInterfaceToken(GetDescriptor());
 
     int32_t fd = -1;
-    int32_t err = 0;    
+    int32_t err = 0;
     fd = open(config.GetFilePath().c_str(), O_RDWR);
     if (fd > 0) {
         DOWNLOAD_HILOGD("File [%{public}s] already exists", config.GetFilePath().c_str());
         fd = -1;
     } else {
-        fd = open(config.GetFilePath().c_str(), O_CREAT | O_RDWR, 0644);
+        fd = open(config.GetFilePath().c_str(), O_CREAT | O_RDWR, FILE_PERMISSION);
         if (fd < 0) {
             DOWNLOAD_HILOGD("Failed to open file [%{public}s], errno [%{public}s]",
                 config.GetFilePath().c_str(), strerror(errno));
@@ -54,7 +56,7 @@ uint32_t DownloadServiceProxy::Request(const DownloadConfig &config)
     DOWNLOAD_HILOGI("Succeed to open file [%{public}s, fd [%{public}d]]", config.GetFilePath().c_str(), fd);
     data.WriteFileDescriptor(fd);
     data.WriteInt32(err);
-    close(fd); 
+    close(fd);
     data.WriteString(config.GetUrl());
     data.WriteBool(config.GetMetered());
     data.WriteBool(config.GetRoaming());

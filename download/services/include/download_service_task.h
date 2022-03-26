@@ -45,7 +45,7 @@ public:
     void GetRunResult(DownloadStatus &status, ErrorCode &code, PausedReason &reason);
 
     void SetRetryTime(uint32_t retryTime);
-	void SetNetworkStatus(bool isOnline);
+    void SetNetworkStatus(bool isOnline);
 
 private:
     void SetStatus(DownloadStatus status, ErrorCode code, PausedReason reason);
@@ -58,7 +58,7 @@ private:
     void DumpPausedReason();
 
     bool ExecHttp();
-	bool SetFileSizeOption(CURL *curl, struct curl_slist *requestHeader);
+    bool SetFileSizeOption(CURL *curl, struct curl_slist *requestHeader);
     bool SetOption(CURL *curl, struct curl_slist *requestHeader);
     struct curl_slist *MakeHeaders(const std::vector<std::string> &vec);
 
@@ -75,7 +75,7 @@ private:
 
     bool CheckResumeCondition();
     void ForceStopRunning();
-	bool HandleFileError();
+    bool HandleFileError();
 
 private:
     uint32_t taskId_;
@@ -96,9 +96,9 @@ private:
 
     DownloadTaskCallback eventCb_;
     std::recursive_mutex mutex_;
-	bool hasFileSize_;
-	bool isOnline_;
-	uint32_t prevSize_;
+    bool hasFileSize_;
+    bool isOnline_;
+    uint32_t prevSize_;
 };
 } // namespace OHOS::Request::Download
 #endif // DOWNLOAD_TASK_H

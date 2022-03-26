@@ -21,6 +21,7 @@
 static constexpr uint32_t THREAD_POOL_NUM = 4;
 static constexpr uint32_t TASK_SLEEP_INTERVAL = 1;
 static constexpr uint32_t MAX_RETRY_TIMES = 3;
+static constexpr uint32_t MAX_NETWORK_TIMES = 100;
 
 namespace OHOS::Request::Download {
 uint32_t DownloadServiceManager::taskId = 1000;
@@ -70,7 +71,7 @@ bool DownloadServiceManager::Create(uint32_t threadNum)
     networkThread_ = std::make_shared<std::thread>(MonitorNetwork, this);
     
     initialized_ = true;
-	return initialized_;
+    return initialized_;
 }
 
 void DownloadServiceManager::Destroy()
@@ -196,7 +197,7 @@ bool DownloadServiceManager::Remove(uint32_t taskId)
         std::lock_guard<std::recursive_mutex> autoLock(mutex_);
         taskMap_.erase(it);
         RemoveFromQueue(pendingQueue_, taskId);
-        RemoveFromQueue(pausedQueue_, taskId);        
+        RemoveFromQueue(pausedQueue_, taskId);
     }
     return result;
 }
@@ -269,7 +270,7 @@ void DownloadServiceManager::MoveTaskToQueue(uint32_t taskId, std::shared_ptr<Do
             RemoveFromQueue(pendingQueue_, taskId);
             PushQueue(pausedQueue_, taskId);
             break;
-        }    
+        }
         case QueueType::NONE_QUEUE:
         default:
             break;
@@ -282,7 +283,7 @@ void DownloadServiceManager::PushQueue(std::queue<uint32_t> &queue, uint32_t tas
     if (taskMap_.find(taskId) == taskMap_.end()) {
         DOWNLOAD_HILOGD("invalid task id [%{public}d]", taskId);
         return;
-    }    
+    }
     bool foundIt = false;
     if (queue.size() > 0) {
         uint32_t indicatorId = queue.front();
@@ -353,13 +354,11 @@ void DownloadServiceManager::ResumeTaskByNetwork()
             uint32_t taskId = pausedQueue_.front();
             if (taskMap_.find(taskId) != taskMap_.end()) {
                 pausedQueue_.pop();
-                
                 auto task = taskMap_[taskId];
                 DownloadStatus status;
                 ErrorCode code;
                 PausedReason reason;
                 task->GetRunResult(status, code, reason);
-                
                 if (reason != PAUSED_BY_USER) {
                     task->Resume();
                     PushQueue(pendingQueue_, taskId);
@@ -387,9 +386,8 @@ void DownloadServiceManager::MonitorNetwork(DownloadServiceManager *thisVal)
             }
         }
         isOnline = currentStatus;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(MAX_NETWORK_TIMES));
         std::this_thread::yield();
     }
 }
-
 } // namespace OHOS::Request::Download

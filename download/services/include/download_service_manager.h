@@ -64,9 +64,9 @@ private:
     void PushQueue(std::queue<uint32_t> &queue, uint32_t taskId);
     void RemoveFromQueue(std::queue<uint32_t> &queue, uint32_t taskId);
 
-	bool GetNetworkStatus();
-	void ResumeTaskByNetwork();
-	static void MonitorNetwork(DownloadServiceManager *thisVal);
+    bool GetNetworkStatus();
+    void ResumeTaskByNetwork();
+    static void MonitorNetwork(DownloadServiceManager *thisVal);
 
 private:
     bool initialized_;
@@ -81,7 +81,7 @@ private:
     uint32_t threadNum_;
     uint32_t timeoutRetry_;
 
-	std::shared_ptr<std::thread> networkThread_;
+    std::shared_ptr<std::thread> networkThread_;
 
     static uint32_t taskId;
     static std::recursive_mutex instanceLock_;

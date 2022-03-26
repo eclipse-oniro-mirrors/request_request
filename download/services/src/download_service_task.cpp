@@ -16,7 +16,7 @@
 #include "download_service_task.h"
 
 #include <algorithm>
-#include <errno.h>
+#include <cerrno>
 #include <unistd.h>
 #include <sys/types.h>
 #include "constant.h"
@@ -194,7 +194,7 @@ void DownloadServiceTask::SetStatus(DownloadStatus status, ErrorCode code, Pause
             if (reason != this->reason_) {
                 this->reason_ = reason;
                 isChanged = true;
-            } 
+            }
         }
 
         return true;
@@ -285,7 +285,7 @@ void DownloadServiceTask::SetReason(PausedReason reason)
             return;
         }
         reason_ = reason;
-    }    
+    }
 }
 
 void DownloadServiceTask::DumpStatus()
@@ -427,18 +427,20 @@ int DownloadServiceTask::ProgressCallback(void *pParam, double dltotal, double d
     if (this_ != nullptr) {
         if (this_->isRemoved_) {
             DOWNLOAD_HILOGD("download task has been removed\n");
+            return  0;
         }
         if (this_->forceStop_) {
             DOWNLOAD_HILOGD("Pause issued by user\n");
             return HTTP_FORCE_STOP;
-        }        
-        if (this_->eventCb_ != nullptr && !this_->isRemoved_) {
-            if (this_->prevSize_ != this_->downloadSize_) {
-                std::lock_guard<std::recursive_mutex> autoLock(this_->mutex_);
-                if (this_->status_ != SESSION_PAUSED) {
-                    this_->eventCb_("progress",  this_->taskId_, this_->downloadSize_, this_->totalSize_);
-                    this_->prevSize_ = this_->downloadSize_;
-                }
+        }
+        if (this_->eventCb_ == nullptr) {
+            return 0;
+        }
+        if (this_->prevSize_ != this_->downloadSize_) {
+            std::lock_guard<std::recursive_mutex> autoLock(this_->mutex_);
+            if (this_->status_ != SESSION_PAUSED) {
+                this_->eventCb_("progress",  this_->taskId_, this_->downloadSize_, this_->totalSize_);
+                this_->prevSize_ = this_->downloadSize_;
             }
         }
         // calc the download speed
@@ -755,9 +757,7 @@ void DownloadServiceTask::HandleCleanup(DownloadStatus status)
 
 bool DownloadServiceTask::HandleFileError()
 {
-    
-    ErrorCode code = ERROR_UNKNOWN;
-    
+    ErrorCode code = ERROR_UNKNOWN;   
     if (config_.GetFD() < 0) {
         switch (config_.GetFDError()) {
             case 0:
@@ -771,7 +771,7 @@ bool DownloadServiceTask::HandleFileError()
 
             default:
                 code = ERROR_FILE_ERROR;
-                break; 
+                break;
         }
         SetStatus(SESSION_FAILED, code, PAUSED_UNKNOWN);
         return true;
