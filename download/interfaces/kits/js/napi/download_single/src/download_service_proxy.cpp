@@ -42,18 +42,17 @@ uint32_t DownloadServiceProxy::Request(const DownloadConfig &config)
     int32_t err = 0;
     fd = open(config.GetFilePath().c_str(), O_RDWR);
     if (fd > 0) {
-        DOWNLOAD_HILOGD("File [%{public}s] already exists", config.GetFilePath().c_str());
+        DOWNLOAD_HILOGD("Download File already exists");
         fd = -1;
     } else {
         fd = open(config.GetFilePath().c_str(), O_CREAT | O_RDWR, FILE_PERMISSION);
         if (fd < 0) {
-            DOWNLOAD_HILOGD("Failed to open file [%{public}s], errno [%{public}s]",
-                config.GetFilePath().c_str(), strerror(errno));
+            DOWNLOAD_HILOGE("Failed to open file errno [%{public}s]", strerror(errno));
             err = errno;
         }
     }
     
-    DOWNLOAD_HILOGI("Succeed to open file [%{public}s, fd [%{public}d]]", config.GetFilePath().c_str(), fd);
+    DOWNLOAD_HILOGI("Succeed to open download file, fd [%{public}d]]", fd);
     data.WriteFileDescriptor(fd);
     data.WriteInt32(err);
     close(fd);

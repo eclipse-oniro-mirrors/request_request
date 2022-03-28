@@ -472,7 +472,7 @@ bool DownloadServiceTask::ExecHttp()
     }
 
     if (config_.GetFD() > 0) {
-        DOWNLOAD_HILOGD("Succeed to open %{public}s", config_.GetFilePath().c_str());
+        DOWNLOAD_HILOGD("Succeed to open download file");
         uint64_t pos = lseek(config_.GetFD(), 0, SEEK_END);
         downloadSize_ = 0;
         if (pos > 0) {
@@ -492,7 +492,7 @@ bool DownloadServiceTask::ExecHttp()
         }
         prevSize_ = downloadSize_;
     } else {
-        DOWNLOAD_HILOGD("Failed to open %{public}s", config_.GetFilePath().c_str());
+        DOWNLOAD_HILOGD("Failed to open download file");
     }
 
     CURLcode code = curl_easy_perform(handle.get());
@@ -761,7 +761,7 @@ bool DownloadServiceTask::HandleFileError()
     if (config_.GetFD() < 0) {
         switch (config_.GetFDError()) {
             case 0:
-                DOWNLOAD_HILOGD("File [%{public}s] already exists", config_.GetFilePath().c_str());
+                DOWNLOAD_HILOGD("Download File already exists");
                 code = ERROR_FILE_ALREADY_EXISTS;
                 break;
                 
