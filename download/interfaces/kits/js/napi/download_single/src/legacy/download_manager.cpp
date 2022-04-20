@@ -93,22 +93,21 @@ void DownloadManager::OnTaskDone(const std::string &token, bool successful, cons
 
     if (successful && descriptor.successCb_) {
         CallFunctionAsync(descriptor.env_, descriptor.successCb_,
-                          [descriptor](napi_env env, napi_ref *recv, int &argc, napi_value *argv) {
-                              *recv = descriptor.this_;
-                              argc = SUCCESS_CB_ARGC;
-                              argv[0] = NapiUtils::CreateObject(descriptor.env_);
-                              NapiUtils::SetStringPropertyUtf8(descriptor.env_, argv[0], "uri",
-                                                               URI_PREFIX + descriptor.filename_);
-                          });
+            [descriptor](napi_env env, napi_ref *recv, int &argc, napi_value *argv) {
+            *recv = descriptor.this_;
+            argc = SUCCESS_CB_ARGC;
+            argv[0] = NapiUtils::CreateObject(descriptor.env_);
+            NapiUtils::SetStringPropertyUtf8(descriptor.env_, argv[0], "uri", URI_PREFIX + descriptor.filename_);
+        });
     }
     if (!successful && descriptor.failCb_) {
         CallFunctionAsync(descriptor.env_, descriptor.failCb_,
-                          [descriptor, errMsg](napi_env env, napi_ref *recv, int &argc, napi_value *argv) {
-                              *recv = descriptor.this_;
-                              argc = FAIL_CB_ARGC;
-                              argv[0] = NapiUtils::CreateStringUtf8(descriptor.env_, errMsg);
-                              argv[1] = NapiUtils::CreateInt32(descriptor.env_, FAIL_CB_DOWNLOAD_ERROR);
-                          });
+            [descriptor, errMsg](napi_env env, napi_ref *recv, int &argc, napi_value *argv) {
+            *recv = descriptor.this_;
+            argc = FAIL_CB_ARGC;
+            argv[0] = NapiUtils::CreateStringUtf8(descriptor.env_, errMsg);
+            argv[1] = NapiUtils::CreateInt32(descriptor.env_, FAIL_CB_DOWNLOAD_ERROR);
+        });
     }
     delete descriptor.task_;
 }
@@ -190,7 +189,7 @@ napi_value DownloadManager::Download(napi_env env, napi_callback_info info)
     DownloadDescriptor descriptor { task, option.filename_, env };
     {
         std::lock_guard<std::mutex> lockGuard(lock_);
-        downloadDescriptors_.insert({token, descriptor});
+        downloadDescriptors_[token] = descriptor;
     }
     auto successCb = NapiUtils::GetNamedProperty(env, argv[0], "success");
     if (successCb != nullptr) {

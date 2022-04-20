@@ -14,7 +14,6 @@
  */
 
 #include "legacy/download_task.h"
-#include <memory>
 #include "log.h"
 
 namespace OHOS::Request::Download::Legacy {
