@@ -57,4 +57,4 @@ private:
     static bool isCurlGlobalInited_;
 };
 }
-#endif //LEGACY_DOWNLOAD_TASK_H
+#endif // LEGACY_DOWNLOAD_TASK_H

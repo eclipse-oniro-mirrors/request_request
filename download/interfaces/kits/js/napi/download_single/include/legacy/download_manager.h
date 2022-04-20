@@ -79,4 +79,4 @@ private:
     static inline const std::string URI_PREFIX = "internal://cache/";
 };
 }
-#endif //LEGACY_DOWNLOAD_MANAGER_H
+#endif // LEGACY_DOWNLOAD_MANAGER_H
