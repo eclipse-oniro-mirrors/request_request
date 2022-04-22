@@ -178,7 +178,7 @@ DownloadTask::DownloadOption DownloadManager::ParseOption(napi_env env, napi_val
 bool DownloadManager::IsPathValid(const std::string &dir, const std::string &filename)
 {
     auto filepath = dir + '/' + filename;
-    char path[PATH_MAX + 1];
+    char path[PATH_MAX] = {0};
     if (realpath(filepath.c_str(), path) && !strncmp(path, dir.c_str(), dir.length())) {
         return true;
     }
