@@ -72,7 +72,6 @@ bool DownloadTask::SetOption(CURL *handle, curl_slist *&headers)
 
     if (!option_.header_.empty()) {
         for (const auto& head : option_.header_) {
-            DOWNLOAD_HILOGD("%{public}s", head.c_str());
             headers = curl_slist_append(headers, head.c_str());
         }
         curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);

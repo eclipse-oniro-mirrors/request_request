@@ -14,6 +14,8 @@
  */
 
 #include "legacy/download_manager.h"
+#include <climits>
+#include <cstdlib>
 #include "legacy/download_task.h"
 #include "ability.h"
 #include "napi_base_context.h"
@@ -173,6 +175,17 @@ DownloadTask::DownloadOption DownloadManager::ParseOption(napi_env env, napi_val
     return downloadOption;
 }
 
+bool DownloadManager::IsPathValid(const std::string &dir, const std::string &filename)
+{
+    auto filepath = dir + '/' + filename;
+    char path[PATH_MAX];
+    if (realpath(filepath.c_str(), path) && !strncmp(path, dir.c_str(), dir.length())) {
+        return true;
+    }
+    DOWNLOAD_HILOGE("file path is invalid");
+    return false;
+}
+
 napi_value DownloadManager::Download(napi_env env, napi_callback_info info)
 {
     size_t argc = DOWNLOAD_ARGC;
@@ -181,6 +194,18 @@ napi_value DownloadManager::Download(napi_env env, napi_callback_info info)
     napi_value res = NapiUtils::GetUndefined(env);
 
     auto option = ParseOption(env, argv[0]);
+    if (!IsPathValid(option.fileDir_, option.filename_)) {
+        auto callback = NapiUtils::GetNamedProperty(env, argv[0], "fail");
+        if (callback != nullptr) {
+            DOWNLOAD_HILOGI("call fail of download");
+            napi_value result[FAIL_CB_ARGC] {};
+            result[0] = NapiUtils::CreateStringUtf8(env, "invalid file name");
+            result[1] = NapiUtils::CreateInt32(env, FAIL_CB_DOWNLOAD_ERROR);
+            NapiUtils::CallFunction(env, argv[0], callback, FAIL_CB_ARGC, result);
+        }
+        return res;
+    }
+
     auto token = GetTaskToken();
     auto* task = new(std::nothrow) DownloadTask(token, option, OnTaskDone);
     if (task == nullptr) {
