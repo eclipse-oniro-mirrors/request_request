@@ -320,11 +320,11 @@ int CUrlAdp::ProgressCallback(void *clientp, curl_off_t dltotal, curl_off_t dlno
                 vmem.upsize = fData->upsize;
             }
             totalulnow += vmem.upsize;
-            UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "===>ProgressCallback vmem.upsize is %{public}lld",
-                (long long)vmem.upsize);
+            UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "===>ProgressCallback vmem.upsize is %{public}lld", (
+			              long long)vmem.upsize);
         }
-        UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "===>ProgressCallback totalulnow is %{public}lld",
-            (long long)totalulnow);
+        UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "===>ProgressCallback totalulnow is %{public}lld", (
+		              long long)totalulnow);
         url->uploadTask_->OnProgress(dltotal, dlnow, ultotal, totalulnow);
     }
     return 0;

@@ -169,7 +169,7 @@ std::unique_ptr<OHOS::NativeRdb::AbsSharedResultSet> DownloadDataBase::Query(
     OHOS::NativeRdb::RdbPredicates &predicates, std::vector<std::string> columns)
 {
     if (store_ == nullptr) {
-        DOWNLOAD_HILOGE("DownloadDataBase Delete store_ is  nullptr");
+        DOWNLOAD_HILOGE("DownloadDataBase Query store_ is  nullptr");
         return nullptr;
     }
     std::unique_ptr<OHOS::NativeRdb::AbsSharedResultSet> result = store_->Query(predicates, columns);
@@ -178,6 +178,7 @@ std::unique_ptr<OHOS::NativeRdb::AbsSharedResultSet> DownloadDataBase::Query(
 
 int SqliteOpenHelperDownloadCallback::OnCreate(OHOS::NativeRdb::RdbStore &store)
 {
+    DOWNLOAD_HILOGD("Download DB OnCreat Enter");
     if (store.ExecuteSql(CREATE_DOWNLOAD) != OHOS::NativeRdb::E_OK) {
         DOWNLOAD_HILOGE("SqliteOpenHelperDownloadCallback create table error");
     }
