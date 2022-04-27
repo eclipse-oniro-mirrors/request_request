@@ -39,9 +39,9 @@ FILE *DownloadTask::OpenDownloadFile() const
 {
     auto downloadFile = option_.fileDir_ + '/' + option_.filename_;
     const char *File_path = downloadFile.c_str();
-    char path[PATH_MAX+1]={0x00};
+    char path[PATH_MAX + 1] = { 0x00 };
 
-    if (strlen(File_path) > PATH_MAX || realpath(File_path,path) == nullptr){
+    if (strlen(File_path) > PATH_MAX || realpath(File_path, path) == nullptr) {
         return nullptr;
     }
     FILE *filp = fopen(path, "w+");

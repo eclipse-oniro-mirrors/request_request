@@ -383,10 +383,10 @@ void DownloadServiceManager::MonitorNetwork(DownloadServiceManager *thisVal)
 {
     bool isOnline = true;
     bool currentStatus = true;
-   if (thisVal == nullptr) {
-       DOWNLOAD_HILOGD("DownloadServiceManager::MonitorNetwork thisVal is nullptr");
-       return;
-   }
+    if (thisVal == nullptr) {
+        DOWNLOAD_HILOGD("DownloadServiceManager::MonitorNetwork thisVal is nullptr");
+        return;
+    }
     while (thisVal->initialized_) {
         currentStatus = thisVal->GetNetworkStatus();
         if (!isOnline && currentStatus) {
