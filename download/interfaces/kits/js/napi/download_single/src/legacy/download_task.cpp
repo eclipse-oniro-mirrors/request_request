@@ -38,10 +38,10 @@ DownloadTask::~DownloadTask()
 FILE *DownloadTask::OpenDownloadFile() const
 {
     auto downloadFile = option_.fileDir_ + '/' + option_.filename_;
-    const char *File_path = downloadFile.c_str();
+    const char *file_Path = downloadFile.c_str();
     char path[PATH_MAX + 1] = { 0x00 };
 
-    if (strlen(File_path) > PATH_MAX || realpath(File_path, path) == nullptr) {
+    if (strlen(file_Path) > PATH_MAX || realpath(file_Path, path) == nullptr) {
         return nullptr;
     }
     FILE *filp = fopen(path, "w+");
