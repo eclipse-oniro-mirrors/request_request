@@ -64,7 +64,8 @@ void ProgressCallback::Progress(const int64_t uploadedSize, const int64_t totalS
             do {
                 if (progressWorkerInner->callback->env_ == tmpEnv &&
                     progressWorkerInner->callback->status_ == napi_ok) {
-                    napi_create_int64(progressWorkerInner->callback->env_, progressWorkerInner->uploadedSize, &jsUploaded);
+                    napi_create_int64(progressWorkerInner->callback->env_,
+                        progressWorkerInner->uploadedSize, &jsUploaded);
                     args[0] = jsUploaded;
                     napi_create_int64(progressWorkerInner->callback->env_,
                         progressWorkerInner->totalSize, &jsTotal);
