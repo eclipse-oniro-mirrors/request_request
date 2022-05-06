@@ -38,13 +38,13 @@ ohos_unittest("upload_obtain_file_UT_test") {
     "//foundation/aafwk/standard/frameworks/kits/ability/native:abilitykit_native",
     "//foundation/aafwk/standard/interfaces/innerkits/uri:zuri",
     "//foundation/aafwk/standard/interfaces/innerkits/want:want",
-    "//foundation/appexecfwk/standard/interfaces/innerkits/appexecfwk_base:appexecfwk_base",
     "//third_party/googletest:gmock_main",
   ]
 
   external_deps = [
     "ability_base:zuri",
     "ability_runtime:ability_manager",
+    "bundle_framework:appexecfwk_base",
     "time_native:time_service",
   ]
 }
