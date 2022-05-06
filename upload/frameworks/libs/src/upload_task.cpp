@@ -205,10 +205,13 @@ std::vector<FileData>& UploadTask::GetFileArray()
             return fileArray_;
         }
         data.fp = file;
-        auto str = StringSplit(f.uri, '\\');
-        if (str.size() > 0) {
-            data.name = str[str.size()-1];
+        std::size_t position = f.uri.find_last_of("/");
+        if (position != std::string::npos) {
+            data.filename = std::string(f.uri, position + 1);
+            data.filename.erase(data.filename.find_last_not_of(" ") + 1);
         }
+        data.name = f.name;
+        data.type = f.type;
         fileArray_.push_back(data);
         totalSize_ += fileSize;
     }
