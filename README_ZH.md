@@ -544,7 +544,7 @@ downloadTask.on('progress', (receivedSize, totalSize) => {
 ```
 3.创建监听complete事件
 
-```
+```js
 // 开启下载任务complete监听，使用callback形式返回。
 downloadTask.on('complete', () => {
     console.info("download task has been completed");
