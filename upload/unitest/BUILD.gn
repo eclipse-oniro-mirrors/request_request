@@ -62,7 +62,6 @@ ohos_unittest("upload_UT_test") {
     "include",
     "//base/miscservices/request/upload/frameworks/libs/include",
     "//base/miscservices/time/interfaces/innerkits/include",
-    "//foundation/appexecfwk/standard/interfaces/innerkits/libeventhandler/include",
     "//foundation/distributedschedule/samgr/interfaces/innerkits/samgr_proxy/include",
     "//foundation/arkui/napi/interfaces/kits",
     "//third_party/json/single_include",
