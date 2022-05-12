@@ -93,9 +93,8 @@ std::vector<std::string> JSUtil::Convert2Header(napi_env env, napi_value value)
         napi_get_named_property(env, value, key, &jsvalue);
         if (jsvalue != nullptr) {
             std::string item(key);
-            item.append(": ");
+            item.append(SEPARATOR);
             item.append(Convert2String(env, jsvalue));
-            UPLOAD_HILOGD(UPLOAD_MODULE_JS_NAPI, "Convert2Header is %{public}s", item.c_str());
             result.push_back(item);
         }
     }
