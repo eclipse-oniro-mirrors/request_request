@@ -46,7 +46,7 @@ bool HasNamedProperty(napi_env env, napi_value object, const std::string &proper
 napi_value GetNamedProperty(napi_env env, napi_value object, const std::string &propertyName)
 {
     napi_value value = nullptr;
-	bool hasProperty = false;
+    bool hasProperty = false;
     NAPI_CALL(env, napi_has_named_property(env, object, propertyName.c_str(), &hasProperty));
     if (!hasProperty) {
         return value;
