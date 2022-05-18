@@ -118,12 +118,12 @@ napi_value DownloadTaskNapi::Initialize(napi_env env, napi_callback_info info)
 {
     DOWNLOAD_HILOGD("constructor download task!");
     napi_value self = nullptr;
-	int parametersPosition = 0;
+    int parametersPosition = 0;
     size_t argc = NapiUtils::MAX_ARGC;
     napi_value argv[NapiUtils::MAX_ARGC] = {nullptr};
     NAPI_CALL(env, napi_get_cb_info(env, info, &argc, argv, &self, nullptr));
 
-	std::shared_ptr<OHOS::AbilityRuntime::Context> context = nullptr;
+    std::shared_ptr<OHOS::AbilityRuntime::Context> context = nullptr;
     napi_status getStatus = GetContext(env, &argv[0], parametersPosition, context);
     if (getStatus != napi_ok) {
         DOWNLOAD_HILOGE("Initialize. GetContext fail.");
