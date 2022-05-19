@@ -53,7 +53,7 @@ public:
 
     void SetInterval(uint32_t interval);
     uint32_t GetInterval() const;
-    
+
     void ResumeTaskByNetwork();
 private:
     enum class QueueType {
