@@ -50,6 +50,8 @@ static constexpr const char *PARAM_KEY_FILE_PATH = "filePath";
 static constexpr const char *PARAM_KEY_TITLE = "title";
 
 namespace OHOS::Request::Download {
+constexpr const std::uint32_t CONFIG_PARAM_AT_FIRST = 0;
+constexpr const std::uint32_t CONFIG_PARAM_AT_SECOND = 1;
 __thread napi_ref DownloadTaskNapi::globalCtor = nullptr;
 std::mutex mutex_;
 napi_value DownloadTaskNapi::JsMain(napi_env env, napi_callback_info info)
@@ -70,7 +72,7 @@ napi_value DownloadTaskNapi::JsMain(napi_env env, napi_callback_info info)
     auto ctxInfo = std::make_shared<ContextInfo>();
     auto input = [ctxInfo](napi_env env, size_t argc, napi_value *argv, napi_value self) -> napi_status {
         DOWNLOAD_HILOGD("download parser to native params %{public}d!", static_cast<int>(argc));
-        NAPI_ASSERT_BASE(env, (argc > 0) && (argc <= 2), " need 1 or 2 parameters!", napi_invalid_arg);
+        NAPI_ASSERT_BASE(env, (argc > 0) && (argc <= 3), " need 2 or 3 parameters!", napi_invalid_arg);
         napi_value proxy = nullptr;
         napi_status status = napi_new_instance(env, GetCtor(env), argc, argv, &proxy);
         if ((proxy == nullptr) || (status != napi_ok)) {
@@ -118,7 +120,7 @@ napi_value DownloadTaskNapi::Initialize(napi_env env, napi_callback_info info)
 {
     DOWNLOAD_HILOGD("constructor download task!");
     napi_value self = nullptr;
-    int parametersPosition = 0;
+    int parametersPosition = CONFIG_PARAM_AT_FIRST;
     size_t argc = NapiUtils::MAX_ARGC;
     napi_value argv[NapiUtils::MAX_ARGC] = {nullptr};
     NAPI_CALL(env, napi_get_cb_info(env, info, &argc, argv, &self, nullptr));
@@ -156,7 +158,7 @@ napi_status DownloadTaskNapi::GetContext(napi_env env, napi_value *argv, int& pa
 {
     bool stageMode = false;
     napi_status status = OHOS::AbilityRuntime::IsStageContext(env, argv[0], stageMode);
-    if (status != napi_ok) {
+    if (status != napi_ok || !stageMode) {
         DOWNLOAD_HILOGE("GetContext. L7");
         auto ability = OHOS::AbilityRuntime::GetCurrentAbility(env);
         if (ability == nullptr) {
@@ -166,20 +168,11 @@ napi_status DownloadTaskNapi::GetContext(napi_env env, napi_value *argv, int& pa
         context = ability->GetAbilityContext();
     } else {
         DOWNLOAD_HILOGE("GetContext. L8");
-        parametersPosition = 1;
-        if (stageMode) {
-            context = OHOS::AbilityRuntime::GetStageModeContext(env, argv[0]);
-            if (context == nullptr) {
-                DOWNLOAD_HILOGE("GetContext. L8. GetStageModeContext contextRtm == nullptr.");
-                return napi_generic_failure;
-            }
-        } else {
-            auto ability = OHOS::AbilityRuntime::GetCurrentAbility(env);
-            if (ability == nullptr) {
-                DOWNLOAD_HILOGE("GetContext. L8. GetCurrentAbility ability == nullptr.");
-                return napi_generic_failure;
-            }
-            context = ability->GetAbilityContext();
+        parametersPosition = CONFIG_PARAM_AT_SECOND; 
+        context = OHOS::AbilityRuntime::GetStageModeContext(env, argv[0]);
+        if (context == nullptr) {
+            DOWNLOAD_HILOGE("GetContext. L8. GetStageModeContext contextRtm == nullptr.");
+            return napi_generic_failure;
         }
     }
     if (context == nullptr) {
