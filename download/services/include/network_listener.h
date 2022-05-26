@@ -18,18 +18,17 @@
 
 #include "net_all_capabilities.h"
 #include "net_conn_callback_stub.h"
-#include "singleton.h"
 
 namespace OHOS {
 namespace MiscServices {
 using RegCallBack = std::function<void()>;
 
 class NetworkListener {
-    DECLARE_DELAYED_SINGLETON(NetworkListener)
 public:
     bool RegOnNetworkChange(RegCallBack&& callback);
     bool IsOnline();
     void SetNetworkStatus(bool isOnline);
+    static std::shared_ptr<NetworkListener> GetInstance();
 
     class NetConnCallbackObserver :  public NetManagerStandard::NetConnCallbackStub {
     public:
@@ -52,9 +51,10 @@ public:
         NetworkListener& NetListener_;
     };
 private:
-    RegCallBack callback_ = nullptr;
-    bool isOnline_;
-    std::mutex mutex_;
+    static RegCallBack callback_;
+    static bool isOnline_;
+    static std::mutex mutex_;
+    static std::shared_ptr<NetworkListener> instance_;
 };
 }   // namespace MiscServices
 }   // namespace OHOS

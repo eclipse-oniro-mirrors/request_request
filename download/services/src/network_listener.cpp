@@ -22,10 +22,17 @@
 using namespace OHOS::NetManagerStandard;
 namespace OHOS {
 namespace MiscServices {
-NetworkListener::NetworkListener() : isOnline_(false) {
-}
+std::shared_ptr<NetworkListener> NetworkListener::instance_ = nullptr;
+std::mutex NetworkListener::mutex_;
+bool NetworkListener::isOnline_ = false;
+RegCallBack NetworkListener::callback_ = nullptr;
 
-NetworkListener::~NetworkListener() {
+std::shared_ptr<NetworkListener> NetworkListener::GetInstance() {
+    if (instance_ == nullptr) {
+        std::lock_guard<std::mutex> autoLock(mutex_);
+        instance_ = std::make_shared<NetworkListener>();
+    }
+    return instance_;
 }
 
 bool NetworkListener::RegOnNetworkChange(RegCallBack&& callback)
