@@ -69,9 +69,8 @@ void DownloadProgressNotify::OnCallBack(MessageParcel &data)
                 napi_get_reference_value(notifyData->env, notifyData->ref, &callbackFunc);
                 napi_value result = nullptr;
                 napi_value callbackVal[NapiUtils::THE_ARG] = {0};
-                napi_get_undefined(notifyData->env, &callbackVal[NapiUtils::FIRST_ARGV]);
-                napi_create_uint32(notifyData->env, notifyData->firstArgv, &callbackVal[NapiUtils::SECOND_ARGV]);
-                napi_create_uint32(notifyData->env, notifyData->secondArgv, &callbackVal[NapiUtils::THIRD_ARGV]);
+                napi_create_uint32(notifyData->env, notifyData->firstArgv, &callbackVal[NapiUtils::FIRST_ARGV]);
+                napi_create_uint32(notifyData->env, notifyData->secondArgv, &callbackVal[NapiUtils::SECOND_ARGV]);
                 napi_call_function(notifyData->env, nullptr, callbackFunc, NapiUtils::THE_ARG, callbackVal, &result);
                 if (work != nullptr) {
                     delete work;
