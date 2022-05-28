@@ -19,7 +19,6 @@
 #include "unistd.h"
 #include "log.h"
 
-
 static constexpr uint32_t THREAD_POOL_NUM = 4;
 static constexpr uint32_t TASK_SLEEP_INTERVAL = 1;
 static constexpr uint32_t MAX_RETRY_TIMES = 3;
