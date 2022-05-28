@@ -21,18 +21,18 @@
 
 namespace OHOS {
 namespace MiscServices {
-using RegCallBack = std::function<void()>;
-
 class NetworkListener {
 public:
+    using RegCallBack = std::function<void()>;
+
     bool RegOnNetworkChange(RegCallBack&& callback);
     bool IsOnline();
-    void SetNetworkStatus(bool isOnline);
-    static std::shared_ptr<NetworkListener> GetInstance();
-
+    static NetworkListener& GetInstance();
+    friend class NetConnCallbackObserver;
+private:
     class NetConnCallbackObserver :  public NetManagerStandard::NetConnCallbackStub {
     public:
-        explicit NetConnCallbackObserver(NetworkListener &NetListener) : NetListener_(NetListener) {}
+        explicit NetConnCallbackObserver(NetworkListener &netListener) : netListener_(netListener) {}
         ~NetConnCallbackObserver() override = default;
         int32_t NetAvailable(sptr<NetManagerStandard::NetHandle> &netHandle) override;
 
@@ -48,13 +48,12 @@ public:
 
         int32_t NetBlockStatusChange(sptr<NetManagerStandard::NetHandle> &netHandle, bool blocked) override;
     private:
-        NetworkListener& NetListener_;
+        NetworkListener& netListener_;
     };
-private:
-    static RegCallBack callback_;
-    static bool isOnline_;
-    static std::mutex mutex_;
-    static std::shared_ptr<NetworkListener> instance_;
+
+    RegCallBack callback_ = nullptr;
+    bool isOnline_ = false;
+    std::mutex mutex_;
 };
 }   // namespace MiscServices
 }   // namespace OHOS

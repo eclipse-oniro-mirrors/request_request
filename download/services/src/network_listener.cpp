@@ -22,18 +22,10 @@
 using namespace OHOS::NetManagerStandard;
 namespace OHOS {
 namespace MiscServices {
-std::shared_ptr<NetworkListener> NetworkListener::instance_ = nullptr;
-std::mutex NetworkListener::mutex_;
-bool NetworkListener::isOnline_ = false;
-RegCallBack NetworkListener::callback_ = nullptr;
-
-std::shared_ptr<NetworkListener> NetworkListener::GetInstance()
+NetworkListener& NetworkListener::GetInstance()
 {
-    if (instance_ == nullptr) {
-        std::lock_guard<std::mutex> autoLock(mutex_);
-        instance_ = std::make_shared<NetworkListener>();
-    }
-    return instance_;
+    static NetworkListener listener;
+    return listener;
 }
 
 bool NetworkListener::RegOnNetworkChange(RegCallBack&& callback)
@@ -66,12 +58,6 @@ bool NetworkListener::IsOnline()
     return isOnline_;
 }
 
-void NetworkListener::SetNetworkStatus(bool isOnline)
-{
-    std::lock_guard<std::mutex> autoLock(mutex_);
-    isOnline_ = isOnline;
-}
-
 int32_t NetworkListener::NetConnCallbackObserver::NetAvailable(sptr<NetHandle> &netHandle)
 {
     return 0;
@@ -82,13 +68,13 @@ int32_t NetworkListener::NetConnCallbackObserver::NetCapabilitiesChange(sptr <Ne
 {
     DOWNLOAD_HILOGD("Observe net capabilities change. start");
     if (netAllCap->netCaps_.count(NetCap::NET_CAPABILITY_VALIDATED)) {
-        NetListener_.SetNetworkStatus(true);
-        if (NetListener_.callback_ != nullptr) {
-            NetListener_.callback_();
+        netListener_.isOnline_ = true;
+        if (netListener_.callback_ != nullptr) {
+            netListener_.callback_();
             DOWNLOAD_HILOGD("NetCapabilitiesChange callback");
         }
     } else {
-        NetListener_.SetNetworkStatus(false);
+        netListener_.isOnline_ = false;
     }
     DOWNLOAD_HILOGD("Observe net capabilities change. end");
     return 0;
