@@ -49,7 +49,7 @@ static napi_value session_pending = nullptr;
 static napi_value session_paused = nullptr;
 static napi_value session_failed = nullptr;
 
-void NapiCreateInt32(napi_env env)
+static void NapiCreateInt32(napi_env env)
 {
     /* Create Network Type Const */
     napi_create_int32(env, static_cast<int32_t>(NETWORK_MOBILE), &network_mobile);
