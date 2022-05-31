@@ -43,9 +43,9 @@ DataAbility能力：DataAbility的使用方，用户获取DataAbility文件协�
 /base/miscservices/request
 ├── figures                  # 架构图
 ├── download/ability         # 下载服务数据库管理模块
-├── download/etc             # 下载服务包含的进程配置文件
-├── interfaces/kits/js/napi  # 本组件对外提供的下载服务接口代码
-│   └── download_single      # 下载服务的napi接口
+├── download/etc  # 下载服务包含的进程配置文件
+	└──interfaces/kits/js/napi  # 本组件对外提供的下载服务接口代码
+		└──download_single      # 下载服务的napi接口
 ├── download/sa_profile      # 下载服务包含的系统服务的配置文件
 ├── download/services        # 下载系统服务实现
 ├── download/utils           # 下载服务包含日志打印和公共事件定义的常量
@@ -833,16 +833,16 @@ uploadTask.on('headerReceive', (headers) => {
 
 ```
 // 开启上传任务complete监听，使用callback形式返回。
-uploadTask.on('complete', () => {
-    console.info("upload task has been completed");
+uploadTask.on('complete', (code,result) => {
+    console.info("upload task has been completed"+code);
 });
 ```
 6.创建上传的错误码监听事件
 
 ```js
 // 开启上传任务监听，使用callback形式返回错误码。
-uploadTask.on('fail', (error) => {
-    console.info("on fail error:" + error);
+uploadTask.on('fail', (error,result) => {
+    console.info("on fail error:" + error+"result is:"+result);
 });
 ```
 7.关闭上传任务进度任务监听
@@ -865,7 +865,7 @@ uploadTask.off('headerReceive', (headers) => {
 
 ```js
 // 关闭上传任务complete监听，使用callback形式返回。
-uploadTask.off('complete', () => {
+uploadTask.off('complete', (code,result) => {
     console.info("delete complete notification");
 });
 ```
@@ -873,8 +873,8 @@ uploadTask.off('complete', () => {
 
 ```js
 // 关闭上传任务监听，使用callback形式返回错误码。
-uploadTask.off('fail', (error) => {
-    console.info("on fail error:" + error);
+uploadTask.off('fail', (error,result) => {
+    console.info("on fail error:" + error+"result is:"+result);
 });
 ```
 11.删除上传的任务
