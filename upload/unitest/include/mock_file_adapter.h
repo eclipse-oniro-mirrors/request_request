@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef MOCK_FILEADAPTER_TEST_H
-#define MOCK_FILEADAPTER_TEST_H
+#ifndef OHOS_REQUEST_UPLOAD_MOCK_FILEADAPTER_TEST_H
+#define OHOS_REQUEST_UPLOAD_MOCK_FILEADAPTER_TEST_H
 
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
@@ -26,10 +26,10 @@ public:
     MockFileAdapter() = default;
     virtual ~MockFileAdapter() = default;
 
-    MOCK_METHOD2(DataAbilityOpenFile, uint32_t(std::string&,
-        std::shared_ptr<OHOS::AbilityRuntime::Context> &));
+    MOCK_METHOD2(DataAbilityOpenFile, uint32_t(std::string &,
+                                               std::shared_ptr<OHOS::AbilityRuntime::Context> &));
     MOCK_METHOD1(InternalGetFilePath,
-        std::string(std::shared_ptr<OHOS::AbilityRuntime::Context> &));
+                 std::string(std::shared_ptr<OHOS::AbilityRuntime::Context> &));
 };
 }  // namespace OHOS::Request::Upload
 #endif  // MOCK_FILEADAPTER_TEST_H

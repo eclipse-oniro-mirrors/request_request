@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef FILE_ADAPTER
-#define FILE_ADAPTER
+#ifndef OHOS_REQUEST_UPLOAD_FILE_ADAPTER
+#define OHOS_REQUEST_UPLOAD_FILE_ADAPTER
 
 #include "i_file_adapter.h"
 
@@ -22,7 +22,7 @@ namespace OHOS::Request::Upload {
 class FileAdapter : public IFileAdapter {
 public:
     uint32_t DataAbilityOpenFile(std::string &fileUri,
-        std::shared_ptr<OHOS::AbilityRuntime::Context> &context);
+                                 std::shared_ptr<OHOS::AbilityRuntime::Context> &context);
     std::string InternalGetFilePath(std::shared_ptr<OHOS::AbilityRuntime::Context> &context);
 };
 } // end of OHOS::Request::Upload

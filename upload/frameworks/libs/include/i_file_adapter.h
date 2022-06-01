@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef I_FILE_ADAPTER
-#define I_FILE_ADAPTER
+#ifndef OHOS_REQUEST_UPLOAD_I_FILE_ADAPTER
+#define OHOS_REQUEST_UPLOAD_I_FILE_ADAPTER
 
 #include <stdio.h>
 #include "context.h"
@@ -26,7 +26,7 @@ class IFileAdapter {
 public:
     virtual ~IFileAdapter() {};
     virtual uint32_t DataAbilityOpenFile(std::string &fileUri,
-        std::shared_ptr<OHOS::AbilityRuntime::Context> &context) = 0;
+                                         std::shared_ptr<OHOS::AbilityRuntime::Context> &context) = 0;
     virtual std::string InternalGetFilePath(std::shared_ptr<OHOS::AbilityRuntime::Context> &context) = 0;
 };
 } // end of OHOS::Request::Upload
