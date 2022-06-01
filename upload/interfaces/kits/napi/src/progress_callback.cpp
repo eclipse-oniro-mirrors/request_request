@@ -59,24 +59,17 @@ void ProgressCallback::Progress(const int64_t uploadedSize, const int64_t totalS
                 UPLOAD_HILOGD(UPLOAD_MODULE_JS_NAPI, "Progress. uv_queue_work callback removed!!");
                 return;
             }
-            napi_value jsUploaded = nullptr;
-            napi_value jsTotal = nullptr;
             napi_value callback = nullptr;
             napi_value args[2];
             napi_value global = nullptr;
             napi_value result;
             napi_status calStatus = napi_generic_failure;
-            napi_create_int64(progressWorkerInner->callback->env_,
-                progressWorkerInner->uploadedSize, &jsUploaded);
-            args[0] = jsUploaded;
-            napi_create_int64(progressWorkerInner->callback->env_,
-                progressWorkerInner->totalSize, &jsTotal);
-            args[1] = jsTotal;
+            napi_create_int64(progressWorkerInner->callback->env_, progressWorkerInner->uploadedSize, &args[0]);
+            napi_create_int64(progressWorkerInner->callback->env_, progressWorkerInner->totalSize, &args[1]);
             napi_get_reference_value(progressWorkerInner->callback->env_,
-                progressWorkerInner->callback->callback_, &callback);
+                                     progressWorkerInner->callback->callback_, &callback);
             napi_get_global(progressWorkerInner->callback->env_, &global);
-            calStatus = napi_call_function(progressWorkerInner->callback->env_,
-                global, callback, 2, args, &result);
+            calStatus = napi_call_function(progressWorkerInner->callback->env_, global, callback, 2, args, &result);
             if (calStatus != napi_ok) {
                 UPLOAD_HILOGD(UPLOAD_MODULE_JS_NAPI,
                     "Progress callback failed calStatus:%{public}d callback:%{public}p", calStatus, callback);
