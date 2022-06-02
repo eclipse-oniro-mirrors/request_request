@@ -507,8 +507,8 @@ void CUrlAdp::StartTimer()
 
 void CUrlAdp::StopTimer()
 {
-    bool ret = MiscServices::TimeServiceClient::GetInstance()->StopTimer(timerId_);
-    ret = MiscServices::TimeServiceClient::GetInstance()->DestroyTimer(timerId_);
+    MiscServices::TimeServiceClient::GetInstance()->StopTimer(timerId_);
+    MiscServices::TimeServiceClient::GetInstance()->DestroyTimer(timerId_);
     return;
 }
 } // namespace OHOS::Request::Upload
