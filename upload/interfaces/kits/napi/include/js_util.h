@@ -31,6 +31,7 @@ public:
     static constexpr int32_t MAX_ARGC = 6;
     static constexpr int32_t MAX_NUMBER_BYTES = 8;
     static constexpr int32_t MAX_LEN = 4096;
+    static constexpr const char *SEPARATOR = ": ";
 
     static std::string Convert2String(napi_env env, napi_value jsString);
     static napi_value Convert2JSString(napi_env env, const std::string &cString);

@@ -10,7 +10,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import("//base/miscservices/request/request_aafwk.gni")
 import("//build/ohos.gni")
+
 config("download_interfaces_kits_napi_config") {
   visibility = [ ":*" ]
   include_dirs = [ "include" ]
@@ -25,19 +27,15 @@ ohos_shared_library("downloadsingle") {
     "//foundation/arkui/napi/interfaces/inner_api",
     "//third_party/node/src",
     "//third_party/curl/include",
-    "//foundation/aafwk/standard/services/common/include",
+    "${aafwk_services_path}/common/include",
     "//utils/system/safwk/native/include",
     "//base/miscservices/request/download/interfaces/kits/napi/download_single/include",
     "//base/miscservices/request/download/interfaces/innerkits/include",
     "//base/miscservices/request/download/utils/include",
-    "//foundation/aafwk/standard/frameworks/kits/appkit/native/app/include/",
-    "//foundation/aafwk/standard/frameworks/kits/ability/native/include",
-    "//foundation/aafwk/standard/interfaces/innerkits/base/include/ohos/aafwk/base",
-    "//foundation/aafwk/standard/services/abilitymgr/include",
-    "//foundation/aafwk/standard/interfaces/innerkits/want/include/ohos/aafwk/content",
-    "//foundation/aafwk/standard/interfaces/innerkits/ability_manager/include",
-    "//foundation/aafwk/standard/interfaces/innerkits/want/include",
-    "//foundation/aafwk/standard/interfaces/innerkits/uri/include",
+    "${aafwk_kits_path}/appkit/native/app/include/",
+    "${aafwk_kits_path}/ability/native/include",
+    "${aafwk_services_path}/abilitymgr/include",
+    "${aafwk_inner_api_path}/ability_manager/include",
   ]
   public_configs = [ ":download_interfaces_kits_napi_config" ]
 
@@ -64,8 +62,6 @@ ohos_shared_library("downloadsingle") {
     "src/napi_utils.cpp",
   ]
   deps = [
-    "//foundation/aafwk/standard/frameworks/kits/ability/native:abilitykit_native",
-    "//foundation/aafwk/standard/interfaces/innerkits/uri:zuri",
     "//foundation/arkui/napi:ace_napi",
     "//foundation/distributedschedule/samgr/interfaces/innerkits/samgr_proxy:samgr_proxy",
     "//third_party/curl:curl",
@@ -75,14 +71,15 @@ ohos_shared_library("downloadsingle") {
     "ability_base:want",
     "ability_base:zuri",
     "ability_runtime:ability_manager",
+    "ability_runtime:abilitykit_native",
     "ability_runtime:napi_base_context",
+    "dataability:native_dataability",
     "eventhandler:libeventhandler",
     "hiviewdfx_hilog_native:libhilog",
     "ipc:ipc_core",
-    "native_appdatamgr:native_appdatafwk",
-    "native_appdatamgr:native_dataability",
-    "native_appdatamgr:native_preferences",
-    "native_appdatamgr:native_rdb",
+    "preferences:native_preferences",
+    "relational_store:native_appdatafwk",
+    "relational_store:native_rdb",
   ]
   relative_install_dir = "module"
   subsystem_name = "miscservices"
