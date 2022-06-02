@@ -56,7 +56,7 @@ bool DownloadServiceTask::Run()
     }
 
     if (!MiscServices::NetworkAdapter::GetInstance().IsOnline()) {
-        SetStatus(SESSION_FAILED, ERROR_NETWORK_ERROR, PAUSED_UNKNOWN);
+        SetStatus(SESSION_FAILED, ERROR_NETWORK_FAIL, PAUSED_UNKNOWN);
         return false;
     }
 
