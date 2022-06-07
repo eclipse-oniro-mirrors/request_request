@@ -21,7 +21,7 @@ namespace OHOS::Request::Download::Legacy {
 bool DownloadTask::isCurlGlobalInited_ = false;
 
 DownloadTask::DownloadTask(const std::string &token, const DownloadOption &option, const DoneFunc &callback)
-    : taskId_(token), option_(option), callback_(callback), totalSize_(0), retryTime_(3), hasFileSize_(false)
+    : taskId_(token), option_(option), callback_(callback), totalSize_(0), retryTime_(10), hasFileSize_(false)
 {
     DOWNLOAD_HILOGI("constructor");
 }
@@ -54,8 +54,12 @@ uint32_t DownloadTask::GetLocalFileSize()
     if (filp_ == nullptr) {
         return 0;
     }
-    
-    fseek(filp_,0,SEEK_END);
+
+    int nRet = fseek(filp_, 0, SEEK_END);
+    if (nRet != 0) {
+        DOWNLOAD_HILOGE("fseek error");
+        return 0;
+    }
     return ftell(filp_);
 }
 void DownloadTask::NotifyDone(bool successful, const std::string &errMsg)
@@ -193,11 +197,11 @@ bool DownloadTask::DoDownload()
         return false;
     }
     uint32_t localFileLenth = GetLocalFileSize();
-    if (localFileLenth > 0 ) {
+    if (localFileLenth > 0) {
         if (localFileLenth < totalSize_) {
             SetResumeFromLarge(handle.get(), localFileLenth);
         } else {
-            NotifyDone(true,"Download task has already completed");
+            NotifyDone(true, "Download task has already completed");
             return true;
         }
     }
@@ -205,7 +209,7 @@ bool DownloadTask::DoDownload()
     auto code = curl_easy_perform(handle.get());
     DOWNLOAD_HILOGI("code=%{public}d, %{public}s", code, errorBuffer_);
     if (code == CURLE_OK) {
-       NotifyDone(code == CURLE_OK, errorBuffer_);
+        NotifyDone(code == CURLE_OK, errorBuffer_);
     }
     return code == CURLE_OK;
 }
