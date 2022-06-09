@@ -139,7 +139,7 @@ int DownloadDataAbility::Insert(const Uri &uri, const NativeRdb::ValuesBucket &v
     DOWNLOAD_HILOGE("DownloadDataAbility Insert id %{public}d", resultId);
     if (resultId == OPERATION_ERROR) {
         DOWNLOAD_HILOGE("DownloadDataAbility Insert error");
-        ret = database_->RollBack();
+        database_->RollBack();
         g_mutex.unlock();
         return OPERATION_ERROR;
     }
