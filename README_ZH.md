@@ -118,8 +118,8 @@ DataAbility能力：DataAbility的使用方，用户获取DataAbility文件协�
 </tr>
 </tbody>
 </table>
-**表 2** DownloadTask的主要接口
 
+**表 2** DownloadTask的主要接口
 <table><thead align="left"><tr id="row143351854201012"><th class="cellrowborder" valign="top" width="50%" id="mcps1.2.3.1.1"><p id="p103351154121010"><a name="p103351154121010"></a><a name="p103351154121010"></a>接口名</p>
 </th>
 <th class="cellrowborder" valign="top" width="50%" id="mcps1.2.3.1.2"><p id="p1033585416105"><a name="p1033585416105"></a><a name="p1033585416105"></a>描述</p>
@@ -368,8 +368,8 @@ DataAbility能力：DataAbility的使用方，用户获取DataAbility文件协�
 </tr>
 </tbody>
 </table>
-**表 5** UploadTask的主要接口
 
+**表 5** UploadTask的主要接口
 <table><thead align="left"><tr id="row143351854201012"><th class="cellrowborder" valign="top" width="50%" id="mcps1.2.3.1.1"><p id="p103351154121010"><a name="p103351154121010"></a><a name="p103351154121010"></a>接口名</p>
 </th>
 <th class="cellrowborder" valign="top" width="50%" id="mcps1.2.3.1.2"><p id="p1033585416105"><a name="p1033585416105"></a><a name="p1033585416105"></a>描述</p>
