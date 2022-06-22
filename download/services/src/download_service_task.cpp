@@ -125,7 +125,8 @@ bool DownloadServiceTask::Resume()
 
 bool DownloadServiceTask::Remove()
 {
-    DOWNLOAD_HILOGI("Task[%{public}d], Status [%{public}d], Code [%{public}d], Reason [%{public}d]",  taskId_, status_, code_, reason_);
+    DOWNLOAD_HILOGI("Task[%{public}d], Status [%{public}d], Code [%{public}d], Reason [%{public}d]",  taskId_,
+                    status_, code_, reason_);
     isRemoved_ = true;
     ForceStopRunning();
     if (eventCb_ != nullptr) {
