@@ -38,6 +38,7 @@ ohos_unittest("upload_obtain_file_UT_test") {
 
   deps = [
     "${aafwk_path}/frameworks/native/ability/native:abilitykit_native",
+    "${aafwk_path}/frameworks/native/ability/native:data_ability_helper",
     "//base/miscservices/request/upload/frameworks/libs/:upload_lib",
     "//third_party/googletest:gmock_main",
   ]
