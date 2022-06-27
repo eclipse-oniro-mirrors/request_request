@@ -32,8 +32,8 @@ ohos_shared_library("downloadsingle") {
     "//base/miscservices/request/download/interfaces/kits/napi/download_single/include",
     "//base/miscservices/request/download/interfaces/innerkits/include",
     "//base/miscservices/request/download/utils/include",
-    "${ability_runtime_kits_path}/appkit/native/app/include/",
-    "${ability_runtime_kits_path}/ability/native/include",
+    "${ability_runtime_path}/interfaces/kits/native/appkit/app/",
+    "${ability_runtime_path}/interfaces/kits/native/ability/native",
     "${ability_runtime_services_path}/abilitymgr/include",
     "${ability_runtime_inner_api_path}/ability_manager/include",
   ]
@@ -72,13 +72,14 @@ ohos_shared_library("downloadsingle") {
     "ability_base:zuri",
     "ability_runtime:ability_manager",
     "ability_runtime:abilitykit_native",
+    "ability_runtime:data_ability_helper",
     "ability_runtime:napi_base_context",
-    "dataability:native_dataability",
     "eventhandler:libeventhandler",
     "hiviewdfx_hilog_native:libhilog",
     "ipc:ipc_core",
-    "preferences:native_preferences",
+    "preference:native_preference",
     "relational_store:native_appdatafwk",
+    "relational_store:native_dataability",
     "relational_store:native_rdb",
   ]
   relative_install_dir = "module"

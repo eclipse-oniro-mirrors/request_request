@@ -56,7 +56,8 @@ ohos_shared_library("upload_lib") {
   configs = [ ":upload_lib_config" ]
 
   deps = [
-    "${ability_runtime_kits_path}/ability/native:abilitykit_native",
+    "${ability_runtime_path}/frameworks/native/ability/native:abilitykit_native",
+    "${ability_runtime_path}/frameworks/native/ability/native:data_ability_helper",
     "//third_party/curl/:curl",
   ]
 
@@ -67,6 +68,7 @@ ohos_shared_library("upload_lib") {
     "hiviewdfx_hilog_native:libhilog",
     "ipc:ipc_core",
     "time_native:time_service",
+    "utils_base:utils",
   ]
 
   public_configs = [ ":upload_lib_public_config" ]
