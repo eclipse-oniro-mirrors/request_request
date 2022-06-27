@@ -50,9 +50,9 @@ void ObtainFileTest::TearDownTestCase(void)
 
 void ObtainFileTest::SetUp()
 {
-	if (this->obfile.fileAdapter_.get() != &adapter) {
-	    this->obfile.fileAdapter_ = std::shared_ptr<IFileAdapter>(&adapter);
-	}
+    if (this->obfile.fileAdapter_.get() != &adapter) {
+        this->obfile.fileAdapter_ = std::shared_ptr<IFileAdapter>(&adapter);
+        }
 }
 
 void ObtainFileTest::TearDown()
