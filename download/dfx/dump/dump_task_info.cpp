@@ -35,7 +35,7 @@ bool DumpTaskInfo::Dump(int fd, const std::vector<std::string> &args)
     return true;
 }
 
-void DumpTaskInfo::DumpAllTaskTile(int fd) const
+void DumpTaskInfo::DumpAllTaskTile(int fd)
 {
     std::ostringstream buffer;
     buffer << std::left;
@@ -43,21 +43,21 @@ void DumpTaskInfo::DumpAllTaskTile(int fd) const
     dprintf(fd, "%s\n", buffer.str().c_str());
 }
 
-void DumpTaskInfo::FormatSummaryTitle(std::ostringstream &buffer) const
+void DumpTaskInfo::FormatSummaryTitle(std::ostringstream &buffer)
 {
     for (const auto &it: summaryColumnTitle_) {
         buffer << std::setw(it.first) << it.second;
     }
 }
 
-void DumpTaskInfo::FormatDetailTitle(std::ostringstream &buffer) const
+void DumpTaskInfo::FormatDetailTitle(std::ostringstream &buffer)
 {
     for (const auto &it: detailColumnTitle_) {
         buffer << std::setw(it.first) << it.second;
     }
 }
 
-void DumpTaskInfo::DumpTaskDetailInfoTile(int fd) const
+void DumpTaskInfo::DumpTaskDetailInfoTile(int fd)
 {
     std::ostringstream buffer;
     buffer << std::left;
@@ -66,43 +66,46 @@ void DumpTaskInfo::DumpTaskDetailInfoTile(int fd) const
     dprintf(fd, "%s\n", buffer.str().c_str());
 }
 
-void DumpTaskInfo::FormatSummaryContent(const std::shared_ptr<DownloadInfo> taskInfo, std::ostringstream &buffer) const
+void DumpTaskInfo::FormatSummaryContent(const DownloadInfo &taskInfo, std::ostringstream &buffer)
 {
     for (const auto &it: dumpSummaryCfg_) {
-        buffer << std::setw(it.first) << it.second(taskInfo);
+        auto columnFormatFun = it.second;
+        buffer << std::setw(it.first) << (this->*columnFormatFun)(taskInfo);
     }
 }
 
-void DumpTaskInfo::FormatDetailContent(const std::shared_ptr<DownloadInfo> taskInfo, std::ostringstream &buffer) const
+void DumpTaskInfo::FormatDetailContent(const DownloadInfo &taskInfo, std::ostringstream &buffer)
 {
     for (const auto &it: dumpDetailCfg_) {
-        buffer << std::setw(it.first) << it.second(taskInfo);
+        auto columnFormatFun = it.second;
+        buffer << std::setw(it.first) << (this->*columnFormatFun)(taskInfo);
     }
 }
 
-bool DumpTaskInfo::DumpAllTask(int fd) const
+bool DumpTaskInfo::DumpAllTask(int fd)
 {
-    std::map<uint32_t, std::shared_ptr<DownloadInfo>> taskMap;
-    DownloadServiceManager::GetInstance().QueryAllTask(taskMap);
-    dprintf(fd, "task num: %u\n", taskMap.size());
-    if (taskMap.size() == 0) {
+    std::vector<DownloadInfo> taskVector;
+    DownloadServiceManager::GetInstance().QueryAllTask(taskVector);
+    dprintf(fd, "task num: %u\n", taskVector.size());
+    if (taskVector.empty()) {
         return true;
     }
 
     DumpAllTaskTile(fd);
-    for (const auto &iter: taskMap) {
+    for (const auto &iter: taskVector) {
         std::ostringstream buffer;
         buffer << std::left;
-        FormatSummaryContent(iter.second, buffer);
+        FormatSummaryContent(iter, buffer);
         dprintf(fd, "%s\n", buffer.str().c_str());
     }
+    taskVector.clear();
     return true;
 }
 
-bool DumpTaskInfo::DumpTaskDetailInfo(int fd, uint32_t taskId) const
+bool DumpTaskInfo::DumpTaskDetailInfo(int fd, uint32_t taskId)
 {
-    std::shared_ptr<DownloadInfo> downloadInfo = std::make_shared<DownloadInfo>();
-    bool ret = DownloadServiceManager::GetInstance().Query(taskId, *downloadInfo);
+    DownloadInfo downloadInfo;
+    bool ret = DownloadServiceManager::GetInstance().Query(taskId, downloadInfo);
     if (!ret) {
         dprintf(fd, "invalid task id %u\n", taskId);
         return false;
@@ -117,19 +120,19 @@ bool DumpTaskInfo::DumpTaskDetailInfo(int fd, uint32_t taskId) const
     return true;
 }
 
-const std::string DumpTaskInfo::DumpTaskID(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpTaskID(const DownloadInfo &taskInfo) const
 {
-    return std::to_string(taskInfo->GetDownloadId());
+    return std::to_string(taskInfo.GetDownloadId());
 }
 
-const std::string DumpTaskInfo::DumpTaskType(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpTaskType(const DownloadInfo &taskInfo) const
 {
     return "download";
 }
 
-const std::string DumpTaskInfo::DumpTaskStatus(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpTaskStatus(const DownloadInfo &taskInfo) const
 {
-    DownloadStatus status = taskInfo->GetStatus();
+    DownloadStatus status = taskInfo.GetStatus();
     std::vector<std::pair<DownloadStatus, std::string>> mapping = {
         {SESSION_SUCCESS, "complete"},
         {SESSION_RUNNING, "running"},
@@ -147,33 +150,33 @@ const std::string DumpTaskInfo::DumpTaskStatus(std::shared_ptr<DownloadInfo> tas
     return "unknown";
 }
 
-const std::string DumpTaskInfo::DumpFileName(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpFileName(const DownloadInfo &taskInfo) const
 {
-    return taskInfo->GetFileName();
+    return taskInfo.GetFileName();
 }
 
-const std::string DumpTaskInfo::DumpRoaming(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpRoaming(const DownloadInfo &taskInfo) const
 {
-    return std::to_string(taskInfo->GetRoaming());
+    return std::to_string(taskInfo.GetRoaming());
 }
 
-const std::string DumpTaskInfo::DumpNetworkType(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpNetworkType(const DownloadInfo &taskInfo) const
 {
-    return std::to_string(taskInfo->GetNetworkType());
+    return std::to_string(taskInfo.GetNetworkType());
 }
 
-const std::string DumpTaskInfo::DumpMetered(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpMetered(const DownloadInfo &taskInfo) const
 {
-    return std::to_string(taskInfo->GetMetered());
+    return std::to_string(taskInfo.GetMetered());
 }
 
-const std::string DumpTaskInfo::DumpFileSize(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpFileSize(const DownloadInfo &taskInfo) const
 {
-    return std::to_string(taskInfo->GetDownloadTotalBytes());
+    return std::to_string(taskInfo.GetDownloadTotalBytes());
 }
 
-const std::string DumpTaskInfo::DumpTransferredSize(std::shared_ptr<DownloadInfo> taskInfo)
+std::string DumpTaskInfo::DumpTransferredSize(const DownloadInfo &taskInfo) const
 {
-    return std::to_string(taskInfo->GetDownloadedBytes());
+    return std::to_string(taskInfo.GetDownloadedBytes());
 }
 }

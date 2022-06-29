@@ -30,41 +30,41 @@ public:
     ~DumpTaskInfo() override {};
 
     bool Dump(int fd, const std::vector<std::string> &args) override;
-public:
-    static const std::string DumpTaskID(std::shared_ptr<DownloadInfo> taskInfo);
-    static const std::string DumpTaskType(std::shared_ptr<DownloadInfo> taskInfo);
-    static const std::string DumpTaskStatus(std::shared_ptr<DownloadInfo> taskInfo);
-    static const std::string DumpFileName(std::shared_ptr<DownloadInfo> taskInfo);
-    static const std::string DumpRoaming(std::shared_ptr<DownloadInfo> taskInfo);
-    static const std::string DumpNetworkType(std::shared_ptr<DownloadInfo> taskInfo);
-    static const std::string DumpMetered(std::shared_ptr<DownloadInfo> taskInfo);
-    static const std::string DumpFileSize(std::shared_ptr<DownloadInfo> taskInfo);
-    static const std::string DumpTransferredSize(std::shared_ptr<DownloadInfo> taskInfo);
 private:
-    void DumpAllTaskTile(int fd) const;
-    bool DumpAllTask(int fd) const;
-    void DumpTaskDetailInfoTile(int fd) const;
-    bool DumpTaskDetailInfo(int fd, uint32_t taskId) const;
-    void FormatSummaryTitle(std::ostringstream &buffer) const;
-    void FormatDetailTitle(std::ostringstream &buffer) const;
-    void FormatSummaryContent(const std::shared_ptr<DownloadInfo> taskInfo, std::ostringstream &buffer) const;
-    void FormatDetailContent(const std::shared_ptr<DownloadInfo> taskInfo, std::ostringstream &buffer) const;
+    void DumpAllTaskTile(int fd);
+    bool DumpAllTask(int fd);
+    void DumpTaskDetailInfoTile(int fd);
+    bool DumpTaskDetailInfo(int fd, uint32_t taskId);
+    void FormatSummaryTitle(std::ostringstream &buffer);
+    void FormatDetailTitle(std::ostringstream &buffer);
+    void FormatSummaryContent(const DownloadInfo &taskInfo, std::ostringstream &buffer);
+    void FormatDetailContent(const DownloadInfo &taskInfo, std::ostringstream &buffer);
+private:
+    std::string DumpTaskID(const DownloadInfo &taskInfo) const;
+    std::string DumpTaskType(const DownloadInfo &taskInfo) const;
+    std::string DumpTaskStatus(const DownloadInfo &taskInfo) const;
+    std::string DumpFileName(const DownloadInfo &taskInfo) const;
+    std::string DumpRoaming(const DownloadInfo &taskInfo) const;
+    std::string DumpNetworkType(const DownloadInfo &taskInfo) const;
+    std::string DumpMetered(const DownloadInfo &taskInfo) const;
+    std::string DumpFileSize(const DownloadInfo &taskInfo) const;
+    std::string DumpTransferredSize(const DownloadInfo &taskInfo) const;
 private:
     static const int32_t columnWidthInt = 12;
     static const int32_t columnWidthShort = 8;
     static const int32_t columnWidthFileName = 256;
 
-    using columnDumpFunc = std::function<const std::string (std::shared_ptr<DownloadInfo>)>;
+    using ColumnDumpFunc = std::string (DumpTaskInfo::*)(const DownloadInfo &taskInfo) const;
     std::vector<std::pair<int32_t, std::string>> summaryColumnTitle_ = {
         {columnWidthInt, "id"},
         {columnWidthInt, "type"},
         {columnWidthInt, "status"},
     };
 
-    std::vector<std::pair<int32_t, columnDumpFunc>> dumpSummaryCfg_ = {
-        {columnWidthInt, DumpTaskID},
-        {columnWidthInt, DumpTaskType},
-        {columnWidthInt, DumpTaskStatus},
+    std::vector<std::pair<int32_t, ColumnDumpFunc>> dumpSummaryCfg_ = {
+        {columnWidthInt, &DumpTaskInfo::DumpTaskID},
+        {columnWidthInt, &DumpTaskInfo::DumpTaskType},
+        {columnWidthInt, &DumpTaskInfo::DumpTaskStatus},
     };
 
     std::vector<std::pair<int32_t, std::string>> detailColumnTitle_ = {
@@ -76,13 +76,13 @@ private:
         {columnWidthFileName, "file_name"},
     };
 
-    std::vector<std::pair<int32_t, columnDumpFunc>> dumpDetailCfg_ = {
-        {columnWidthShort, DumpRoaming},
-        {columnWidthShort, DumpNetworkType},
-        {columnWidthShort, DumpMetered},
-        {columnWidthInt, DumpFileSize},
-        {columnWidthInt, DumpTransferredSize},
-        {columnWidthFileName, DumpFileName},
+    std::vector<std::pair<int32_t, ColumnDumpFunc>> dumpDetailCfg_ = {
+        {columnWidthShort, &DumpTaskInfo::DumpRoaming},
+        {columnWidthShort, &DumpTaskInfo::DumpNetworkType},
+        {columnWidthShort, &DumpTaskInfo::DumpMetered},
+        {columnWidthInt, &DumpTaskInfo::DumpFileSize},
+        {columnWidthInt, &DumpTaskInfo::DumpTransferredSize},
+        {columnWidthFileName, &DumpTaskInfo::DumpFileName},
     };
 };
 }

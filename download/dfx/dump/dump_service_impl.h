@@ -21,7 +21,7 @@
 
 namespace OHOS::Request::Download {
 enum DumperType : uint32_t {
-    HELP_DUMPER,
+    HELP_DUMPER = 0,
     TASK_INFO_DUMPER,
     DUMPER_NUM,
 };
@@ -35,10 +35,12 @@ private:
     virtual ~DumpServiceImpl();
     DumpServiceImpl(DumpServiceImpl const &) = delete;
     void operator=(DumpServiceImpl const &) = delete;
+    DumpServiceImpl(DumpServiceImpl &&) = delete;
+    DumpServiceImpl &operator=(DumpServiceImpl &&) = delete;
 
     void InitDumperFactoryMap();
     void DumpHelp(int fd);
-    DumperType GetDumperType(const std::string &agr);
+    DumperType GetDumperType(const std::string &cmd);
 private:
     using DumperFactoryMap = std::map<DumperType, std::shared_ptr<DumperFactory>>;
     DumperFactoryMap dumperFactoryMap_;

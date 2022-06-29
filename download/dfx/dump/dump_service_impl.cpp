@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+
 #include "i_dumper.h"
 #include "task_info_dumper_factory.h"
 #include "dump_service_impl.h"
@@ -43,11 +44,11 @@ DumpServiceImpl &DumpServiceImpl::GetInstance()
     return instance;
 }
 
-DumperType DumpServiceImpl::GetDumperType(const std::string &agr)
+DumperType DumpServiceImpl::GetDumperType(const std::string &cmd)
 {
-    if (agr == "-h") {
+    if (cmd == "-h") {
         return HELP_DUMPER;
-    } else if (agr == "-t") {
+    } else if (cmd == "-t") {
         return TASK_INFO_DUMPER;
     } else {
         return DUMPER_NUM;
@@ -56,7 +57,7 @@ DumperType DumpServiceImpl::GetDumperType(const std::string &agr)
 
 int DumpServiceImpl::Dump(int fd, const std::vector<std::string> &args)
 {
-    if (args.size() == 0) {
+    if (args.empty()) {
         DumpHelp(fd);
         return 0;
     }
@@ -73,12 +74,9 @@ int DumpServiceImpl::Dump(int fd, const std::vector<std::string> &args)
         return 0;
     }
 
-    std::shared_ptr<DumperFactory> dumperFactory = it->second;
-    std::shared_ptr<IDumper> dumper = dumperFactory->CreateDumper();
+    auto dumper = it->second->CreateDumper();
     if (dumper != nullptr) {
-        std::vector<std::string> dumpAgr = args;
-        dumpAgr.erase(dumpAgr.begin());
-        dumper->Dump(fd, dumpAgr);
+        dumper->Dump(fd, {args.begin() + 1, args.end()});
     }
 
     return 0;
@@ -86,10 +84,10 @@ int DumpServiceImpl::Dump(int fd, const std::vector<std::string> &args)
 
 void DumpServiceImpl::DumpHelp(int fd)
 {
-    const char* helper =
+    constexpr const char *DEFAULT_HELPER =
         "usage:\n"
         "  -h                    help text for the tool\n"
         "  -t [taskid]           with no taskid: display all task summary info; taskid: display one task detail info\n";
-    dprintf(fd, "%s\n", helper);
+    dprintf(fd, "%s\n", DEFAULT_HELPER);
 }
 }

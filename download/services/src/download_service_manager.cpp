@@ -392,15 +392,12 @@ void DownloadServiceManager::UpdateNetworkType()
     }
 }
 
-bool DownloadServiceManager::QueryAllTask(std::map<uint32_t, std::shared_ptr<DownloadInfo>> &taskMap) const
+bool DownloadServiceManager::QueryAllTask(std::vector<DownloadInfo> &taskVector) const
 {
     for (const auto &it : taskMap_) {
-        std::shared_ptr<DownloadInfo> downloadInfo = std::make_shared<DownloadInfo>();
-        if (downloadInfo == nullptr) {
-            return false;
-        }
-        it.second->Query(*downloadInfo);
-        taskMap[it.first] = downloadInfo;
+        DownloadInfo downloadInfo;
+        it.second->Query(downloadInfo);
+        taskVector.push_back(downloadInfo);
     }
     return true;
 }
