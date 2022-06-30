@@ -519,10 +519,9 @@ bool DownloadServiceTask::ExecHttp()
 void DownloadServiceTask::RecordTaskEvent(int32_t httpCode)
 {
     DOWNLOAD_HILOGI("in RecordTaskEvent");
-    if(status_ == SESSION_SUCCESS) {
-        uint32_t tasksNumber = 1;
+    if (status_ == SESSION_SUCCESS) {
         TaskStatistics::GetInstance().ReportTasksSize(totalSize_);
-    	TaskStatistics::GetInstance().ReportTasksNumber(tasksNumber);
+        TaskStatistics::GetInstance().ReportTasksNumber();
     } else {
         TaskFault::GetInstance().ReportFault(httpCode);
     }

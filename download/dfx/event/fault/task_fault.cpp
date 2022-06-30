@@ -28,10 +28,9 @@ TaskFault &TaskFault::GetInstance()
 
 void TaskFault::ReportFault(int error) const
 {
-   int writeRet = HiSysEvent::Write(HiSysEvent::Domain::MISC_REQUEST,
-                       "REQUEST_SERVICE_START_FAULT",
-                       HiSysEvent::EventType::FAULT,
-                       "ERROR_INFO", error);
-   DOWNLOAD_HILOGE("write service start fail event result: %{public}d", writeRet);
+    OHOS::HiviewDFX::HiSysEvent::Write(OHOS::HiviewDFX::HiSysEvent::Domain::REQUEST,
+        REQUEST_SERVICE_START_FAULT,
+        OHOS::HiviewDFX::HiSysEvent::EventType::FAULT,
+        ERROR_INFO, error);
 }
 } // namespace OHOS::Request::Download

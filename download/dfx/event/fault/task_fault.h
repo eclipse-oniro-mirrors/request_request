@@ -16,12 +16,24 @@
 #ifndef TASK_FAULT_H
 #define TASK_FAULT_H
 
+#include <string>
+
 namespace OHOS::Request::Download {
 class TaskFault {
 public:
    static TaskFault &GetInstance();
    void ReportFault(int error) const;
 private:
+   TaskFault() = default;
+   ~TaskFault() = default;
+   TaskFault(const TaskFault &) = delete;
+   TaskFault(TaskFault &&) = delete;
+   TaskFault &operator=(const TaskFault &) = delete;
+   TaskFault &operator=(TaskFault &&) = delete;
+
+   static const inline std::string REQUEST_SERVICE_START_FAULT = "REQUEST_SERVICE_START_FAULT";
+   static const inline std::string ERROR_INFO = "ERROR_INFO";
+   static const inline std::string TASKS_NUMBER = "TASKS_NUMBER";
 };
 }
 #endif // TASK_FAULT_H

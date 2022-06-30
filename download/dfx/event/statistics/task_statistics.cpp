@@ -16,15 +16,10 @@
 #include <thread>
 #include <unistd.h>
 #include "log.h"
-#include "task_statistics.h"
 #include "hisysevent.h"
+#include "task_statistics.h"
 
 namespace OHOS::Request::Download {
-using OHOS::HiviewDFX::HiSysEvent;
-TaskStatistics::TaskStatistics() : DayTasksSize_(0), DayTasksNumber_(0), running_(false)
-{
-}
-
 TaskStatistics &TaskStatistics::GetInstance()
 {
     static TaskStatistics instance;
@@ -37,18 +32,18 @@ void TaskStatistics::ReportTasksSize(uint64_t totalSize)
     DayTasksSize_ += totalSize;
 }
 
-void TaskStatistics::ReportTasksNumber(uint32_t number)
+void TaskStatistics::ReportTasksNumber()
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    DayTasksNumber_ += number;
+    DayTasksNumber_ ++;
 }
 
-uint64_t TaskStatistics::GetDayTasksSize() const 
+uint64_t TaskStatistics::GetDayTasksSize() const
 {
     return DayTasksSize_;
 }
 
-uint32_t TaskStatistics::GetDayTasksNumber() const 
+uint32_t TaskStatistics::GetDayTasksNumber() const
 {
     return DayTasksNumber_;
 }
@@ -68,12 +63,11 @@ int32_t TaskStatistics::GetNextReportInterval() const
 }
 void TaskStatistics::ReportStatistics() const
 {
-    int writeRet = HiSysEvent::Write(HiSysEvent::Domain::MISC_REQUEST,
-                        "REQUEST_SERVICE_START_STATISTIC",
-                        HiSysEvent::EventType::STATISTIC,
-                        "TASKS_SIZE", DayTasksSize_,
-                        "TASKS_NUMBER", DayTasksNumber_);
-    DOWNLOAD_HILOGD("write service statistics stati event result: %{public}d", writeRet);
+    OHOS::HiviewDFX::HiSysEvent::Write(OHOS::HiviewDFX::HiSysEvent::Domain::REQUEST,
+        REQUEST_SERVICE_START_STATISTIC,
+        OHOS::HiviewDFX::HiSysEvent::EventType::STATISTIC,
+        TASKS_SIZE, DayTasksSize_,
+        TASKS_NUMBER, DayTasksNumber_);
 }
 
 void TaskStatistics::StartTimerThread()
@@ -83,14 +77,14 @@ void TaskStatistics::StartTimerThread()
     }
 
     running_ = true;
-    auto fun = [=]() {
+    auto fun = [this]() {
         while (true) {
             int32_t nextReportInterval = GetNextReportInterval();
-            DOWNLOAD_HILOGE("taskRun  next interval: %{public}d", nextReportInterval);
+            DOWNLOAD_HILOGD("taskRun next interval: %{public}d", nextReportInterval);
             sleep(nextReportInterval);
             ReportStatistics();
-            DayTasksNumber_ = 0;
-            DayTasksSize_ = 0;
+            this->DayTasksNumber_ = 0;
+            this->DayTasksSize_ = 0;
         }
     };
     std::thread th = std::thread(fun);

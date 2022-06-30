@@ -37,7 +37,7 @@
 #   Example of some hiviewdfx events definition     #
 #####################################################
 
-domain: MISC_REQUEST
+domain: REQUEST
 
 REQUEST_SERVICE_START_FAULT:
   __BASE: {type: FAULT, level: CRITICAL, desc: The download service start fail }

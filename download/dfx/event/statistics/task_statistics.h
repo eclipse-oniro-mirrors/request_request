@@ -17,30 +17,36 @@
 #define TASK_STATISTICS_H
 
 #include <mutex>
+#include <atomic>
 
 namespace OHOS::Request::Download {
 class TaskStatistics {
 public:
     static TaskStatistics &GetInstance();
     void ReportTasksSize(uint64_t totalSize);
-    void ReportTasksNumber(uint32_t number);
+    void ReportTasksNumber();
     uint64_t GetDayTasksSize() const;
     uint32_t GetDayTasksNumber() const;
     void StartTimerThread();
 
 private:
-    TaskStatistics();
-    virtual ~TaskStatistics() = default;
-    TaskStatistics(TaskStatistics const &) = delete;
-    void operator=(TaskStatistics const &) = delete;
-
+    TaskStatistics() = default;
+    ~TaskStatistics() = default;
+    TaskStatistics(const TaskStatistics &) = delete;
+    TaskStatistics(TaskStatistics &&) = delete;
+    TaskStatistics &operator=(const TaskStatistics &) = delete;
+    TaskStatistics &operator=(TaskStatistics &&) = delete;
     int32_t GetNextReportInterval() const;
     void ReportStatistics() const;
 private:
+    static const inline std::string REQUEST_SERVICE_START_STATISTIC = "REQUEST_SERVICE_START_STATISTIC";
+    static const inline std::string TASKS_SIZE = "TASKS_SIZE";
+    static const inline std::string TASKS_NUMBER = "TASKS_NUMBER";
+
     std::mutex mutex_;
-    uint64_t DayTasksSize_;
-    uint32_t DayTasksNumber_;
-    bool running_ = false;
+    int64_t DayTasksSize_ = 0;
+    int32_t DayTasksNumber_ = 0;
+    bool running_ { false };
 };
 }
 #endif // TASK_STATISTICS_H
