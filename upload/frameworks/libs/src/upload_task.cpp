@@ -161,7 +161,7 @@ void UploadTask::ReportTaskFault(TaskResult taskResult) const
         TOTAL_FILE_NUM, fileArray_.size(),
         FAIL_FILE_NUM, taskResult.failCount,
         SUCCESS_FILE_NUM, taskResult.successCount,
-        ERROR_INFO, taskResult.errorCode);   
+        ERROR_INFO, taskResult.errorCode);
 }
 
 void UploadTask::OnProgress(curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)

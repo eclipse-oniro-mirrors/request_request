@@ -48,6 +48,7 @@ protected:
     static int OnDebug(CURL *curl, curl_infotype itype, char *pData, size_t size, void *lpvoid);
 
 private:
+    int CheckUploadStatus(CURLM *curlMulti);
     bool MultiAddHandle(CURLM *curlMulti, std::vector<CURL*>& curlArray);
     int32_t CheckUrlStatus();
     int32_t UploadFile();
@@ -66,6 +67,7 @@ private:
     std::vector<FileData> fileArray_;
     FileData  mfileData_;
     std::shared_ptr<UploadConfig> config_;
+    static constexpr const int32_t HTTP_MIN_ERROR_CODE = 400;
     std::mutex mutex_;
     std::mutex curlMutex_;
     std::mutex setAbortMutex_;

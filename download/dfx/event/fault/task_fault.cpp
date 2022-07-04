@@ -43,6 +43,6 @@ void TaskFault::ReportTaskFault(int error) const
         TOTAL_FILE_NUM, 1,
         FAIL_FILE_NUM, 1,
         SUCCESS_FILE_NUM, 0,
-        ERROR_INFO, error);   
+        ERROR_INFO, error);
 }
 } // namespace OHOS::Request::Download
