@@ -41,15 +41,18 @@ domain: REQUEST
 
 REQUEST_SERVICE_START_FAULT:
   __BASE: {type: FAULT, level: CRITICAL, desc: The download service start fail }
-  ERROR_INFO: {type: INT32, desc: error code }
+  ERROR_INFO: {type: INT32, desc: Error code }
 
 REQUEST_TASK_FAULT:
-  __BASE: {type: FAULT, level: CRITICAL, desc: The download task fail }
-  TASK_TYPE: {type: STRING, desc: The task type }
-  ERROR_INFO: {type: INT32, desc: error code }
+  __BASE: {type: FAULT, level: MINOR, desc: The request task fail }
+  TASK_TYPE: {type: STRING, desc: Task type}
+  TOTAL_FILE_NUM: {type: INT32, desc: Total number of documents }
+  FAIL_FILE_NUM: {type: INT32, desc: Number of failed files }
+  SUCCESS_FILE_NUM: {type: INT32, desc: Number of successful files }
+  ERROR_INFO: {type: INT32, desc: Error code }
 
 REQUEST_TASK_INFO_STATISTICS:
-  __BASE: {type: STATISTIC, level: CRITICAL, desc: Statistics of download tasks }
-  TASKS_SIZE: {type: INT64, desc:  download tasks size}
-  TASKS_NUMBER: {type: INT32, desc:  download tasks number}
+  __BASE: {type: STATISTIC, level: MINOR, desc: Statistics of download tasks }
+  TASKS_SIZE: {type: INT64, desc: Download tasks size}
+  TASKS_NUMBER: {type: INT32, desc: Download tasks number}
 

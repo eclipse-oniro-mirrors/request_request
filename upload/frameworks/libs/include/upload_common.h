@@ -23,6 +23,12 @@ enum Type {
     TYPE_FAIL_CALLBACK,
 };
 
+struct TaskResult {
+    int32_t successCount {};
+    int32_t failCount {};
+    int32_t errorCode {};
+};
+
 #ifndef UPLOAD_API
 #define UPLOAD_API __attribute__ ((visibility ("default")))
 #endif

@@ -30,7 +30,7 @@ class CUrlAdp {
 public:
     CUrlAdp(std::vector<FileData>& fileArray, std::shared_ptr<UploadConfig>& config);
     virtual ~CUrlAdp();
-    void DoUpload(IUploadTask *task);
+    void DoUpload(IUploadTask *task, TaskResult &taskResult);
     bool Remove();
     void FailNotify(unsigned int error);
     bool IsReadAbort()
@@ -49,22 +49,17 @@ protected:
 
 private:
     bool MultiAddHandle(CURLM *curlMulti, std::vector<CURL*>& curlArray);
-    void UploadFile();
+    int32_t CheckUrlStatus();
+    int32_t UploadFile();
     void SetHeadData(CURL *curl);
     void SetCurlOpt(CURL *curl);
-    void CheckUploadStatus(CURLM *curlMulti);
     void CurlGlobalInit();
     void CurlGlobalCleanup();
     void InitTimerInfo();
     void StartTimer();
     void StopTimer();
-    void ReportTaskFault(int error) const;
 
 private:
-    static constexpr const char *REQUEST_TASK_FAULT = "REQUEST_TASK_FAULT";
-    static constexpr const char *ERROR_INFO = "ERROR_INFO";
-    static constexpr const char *TASKS_TYPE = "TASKS_TYPE";
-    static constexpr const char *UPLOAD = "UPLOAD";
     uint64_t timerId_;
     std::shared_ptr<UploadTimerInfo> timerInfo_;
     IUploadTask *uploadTask_;
