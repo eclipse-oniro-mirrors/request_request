@@ -34,7 +34,7 @@ private:
     static constexpr const char *REQUEST_TASK_FAULT = "REQUEST_TASK_FAULT";
     static constexpr const char *TASKS_TYPE = "TASKS_TYPE";
     static constexpr const char *DOWNLOAD = "DOWNLOAD";
-	static constexpr const char *TOTAL_FILE_NUM = "TOTAL_FILE_NUM";
+    static constexpr const char *TOTAL_FILE_NUM = "TOTAL_FILE_NUM";
     static constexpr const char *FAIL_FILE_NUM = "FAIL_FILE_NUM";
     static constexpr const char *SUCCESS_FILE_NUM = "SUCCESS_FILE_NUM";
     static constexpr const char *ERROR_INFO = "ERROR_INFO";
