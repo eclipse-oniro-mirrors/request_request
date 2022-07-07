@@ -51,8 +51,8 @@ bool DownloadServiceManager::Create(uint32_t threadNum)
 
     threadNum_ = threadNum;
     for (uint32_t i = 0; i < threadNum; i++) {
-        threadList_.push_back(std::make_shared<DownloadThread>([this]() {
-            return ProcessTask();
+        threadList_.push_back(std::make_shared<DownloadThread>([mgr = shared_from_this()]() {
+            return mgr->ProcessTask();
         }, interval_));
         threadList_[i]->Start();
     }
