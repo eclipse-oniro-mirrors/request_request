@@ -80,14 +80,15 @@ int32_t DownloadServiceAbility::Init()
         DOWNLOAD_HILOGE("DownloadServiceAbility Publish failed.");
         return E_DOWNLOAD_PUBLISH_FAIL;
     }
-    if (DownloadServiceManager::GetInstance() == nullptr) {
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance == nullptr) {
         DOWNLOAD_HILOGE("DownloadServiceManager is null");
         return ERR_INVALID_VALUE;
     }
     state_ = ServiceRunningState::STATE_RUNNING;
     uint32_t threadNum = 4;
     DOWNLOAD_HILOGI("Start Download Service Manager with %{public}d threas", threadNum);
-    DownloadServiceManager::GetInstance()->Create(threadNum);
+    instance->Create(threadNum);
     DOWNLOAD_HILOGE("state_  is %{public}d.", static_cast<int>(state_));
     DOWNLOAD_HILOGI("Init DownloadServiceAbility success.");
     return ERR_OK;
@@ -144,13 +145,14 @@ void DownloadServiceAbility::OnStop()
     if (state_ != ServiceRunningState::STATE_RUNNING) {
         return;
     }
-    if (DownloadServiceManager::GetInstance() == nullptr) {
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance == nullptr) {
         DOWNLOAD_HILOGE("DownloadServiceManager is null");
         return;
     }
     serviceHandler_ = nullptr;
     instance_ = nullptr;
-    DownloadServiceManager::GetInstance()->Destroy();
+    instance->Destroy();
     state_ = ServiceRunningState::STATE_NOT_START;
     DOWNLOAD_HILOGI("OnStop end.");
 }
@@ -159,9 +161,10 @@ uint32_t DownloadServiceAbility::Request(const DownloadConfig &config)
 {
     ManualStart();
     uint32_t taskId = 0;
-    if (DownloadServiceManager::GetInstance() != nullptr) {
-        taskId = DownloadServiceManager::GetInstance()->AddTask(config);
-        DownloadServiceManager::GetInstance()->InstallCallback(taskId, NotifyHandler);
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance != nullptr) {
+        taskId = instance->AddTask(config);
+        instance->InstallCallback(taskId, NotifyHandler);
     }
     DOWNLOAD_HILOGI("DownloadServiceAbility Allocate Task[%{public}d] started.", taskId);
     return taskId;
@@ -170,56 +173,61 @@ uint32_t DownloadServiceAbility::Request(const DownloadConfig &config)
 bool DownloadServiceAbility::Pause(uint32_t taskId)
 {
     ManualStart();
-    if (DownloadServiceManager::GetInstance() == nullptr) {
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance == nullptr) {
         DOWNLOAD_HILOGE("DownloadServiceManager is null");
         return false;
     }
     DOWNLOAD_HILOGI("DownloadServiceAbility Pause started.");
-    return DownloadServiceManager::GetInstance()->Pause(taskId);
+    return instance->Pause(taskId);
 }
 
 bool DownloadServiceAbility::Query(uint32_t taskId, DownloadInfo &info)
 {
     ManualStart();
-    if (DownloadServiceManager::GetInstance() == nullptr) {
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance == nullptr) {
         DOWNLOAD_HILOGE("DownloadServiceManager is null");
         return false;
     }
     DOWNLOAD_HILOGI("DownloadServiceAbility Query started.");
-    return DownloadServiceManager::GetInstance()->Query(taskId, info);
+    return instance->Query(taskId, info);
 }
 
 bool DownloadServiceAbility::QueryMimeType(uint32_t taskId, std::string &mimeType)
 {
     ManualStart();
-    if (DownloadServiceManager::GetInstance() == nullptr) {
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance == nullptr) {
         DOWNLOAD_HILOGE("DownloadServiceManager is null");
         return false;
     }
     DOWNLOAD_HILOGI("DownloadServiceAbility QueryMimeType started.");
-    return DownloadServiceManager::GetInstance()->QueryMimeType(taskId, mimeType);
+    return instance->QueryMimeType(taskId, mimeType);
 }
 
 bool DownloadServiceAbility::Remove(uint32_t taskId)
 {
     ManualStart();
-    if (DownloadServiceManager::GetInstance() == nullptr) {
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance == nullptr) {
         DOWNLOAD_HILOGE("DownloadServiceManager is null");
         return false;
     }
     DOWNLOAD_HILOGI("DownloadServiceAbility Remove started.");
-    return DownloadServiceManager::GetInstance()->Remove(taskId);
+    return instance->Remove(taskId);
 }
 
 bool DownloadServiceAbility::Resume(uint32_t taskId)
 {
     ManualStart();
-    if (DownloadServiceManager::GetInstance() == nullptr) {
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance == nullptr) {
         DOWNLOAD_HILOGE("DownloadServiceManager is null");
         return false;
     }
     DOWNLOAD_HILOGI("DownloadServiceAbility Resume started.");
-    return DownloadServiceManager::GetInstance()->Resume(taskId);
+    return instance->Resume(taskId);
 }
 
 bool DownloadServiceAbility::On(uint32_t taskId, const std::string &type, const sptr<DownloadNotifyInterface> &listener)
@@ -275,11 +283,12 @@ bool DownloadServiceAbility::CheckPermission()
 
 bool DownloadServiceAbility::SetStartId(uint32_t startId)
 {
-    if (DownloadServiceManager::GetInstance() == nullptr) {
+    auto instance = DownloadServiceManager::GetInstance();
+    if (instance == nullptr) {
         DOWNLOAD_HILOGE("DownloadServiceManager is null");
         return false;
     }
-    DownloadServiceManager::GetInstance()->SetStartId(startId);
+    instance->SetStartId(startId);
     DOWNLOAD_HILOGI("Set Start Task id is %{public}d", startId);
     return true;
 }
