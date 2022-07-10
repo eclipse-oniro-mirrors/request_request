@@ -14,7 +14,6 @@
  */
 
 #include "download_thread.h"
-
 #include "download_service_manager.h"
 
 namespace OHOS::Request::Download {
@@ -25,11 +24,13 @@ DownloadThread::DownloadThread(std::function<bool()> &&task, uint32_t interval)
 
 DownloadThread::~DownloadThread()
 {
+    Stop();
     thread_.join();
 }
 
 void DownloadThread::Start()
 {
+    isRunning_ = true;
 }
 void DownloadThread::Stop()
 {
@@ -38,10 +39,9 @@ void DownloadThread::Stop()
 
 void DownloadThread::Run(DownloadThread *this_)
 {
-    if (this_ == nullptr) {
+    if (this_ == nullptr || this_->task_ == nullptr) {
         return;
     }
-    this_->isRunning_ = true;
     while (this_->isRunning_) {
         if (this_->task_ != nullptr) {
             if (!this_->task_()) {

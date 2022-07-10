@@ -20,8 +20,6 @@
 #include <thread>
 
 namespace OHOS::Request::Download {
-class DownloadServiceManager;
-
 class DownloadThread final {
 public:
     explicit DownloadThread(std::function<bool()> &&task, uint32_t interval);
@@ -34,7 +32,7 @@ private:
     static void Run(DownloadThread *this_);
 
 private:
-    bool isRunning_;
+    volatile bool isRunning_;
     std::thread thread_;
     uint32_t interval_;
     std::function<bool()> task_ = nullptr;
