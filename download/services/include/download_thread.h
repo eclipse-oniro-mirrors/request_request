@@ -17,7 +17,7 @@
 #define DOWNLOAD_THREAD_H
 
 #include <thread>
-#include <stdint.h>
+#include <cstdint>
 #include "functional"
 
 namespace OHOS::Request::Download {
