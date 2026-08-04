@@ -22,12 +22,13 @@ use std::time::Duration;
 use cache_core::{CacheManager, RamCache};
 use netstack_rs::info::DownloadInfoMgr;
 use request_utils::test::log::init;
-use request_utils::test::server::test_server;
+use request_utils::test::server::{mock_server, test_server, HTTP_OK};
 
 use super::*;
 use crate::services::PreloadCallback;
 
-const TEST_URL: &str = "https://www.baidu.com";
+// Local mock-server URL (127.0.0.1, OS-assigned port) — no public network.
+static TEST_URL: LazyLock<String> = LazyLock::new(|| mock_server(HTTP_OK, vec![0u8; 1024]));
 
 struct TestCallback {
     flag: Arc<AtomicBool>,
@@ -69,10 +70,10 @@ fn ut_preload() {
     init();
     static CACHE_MANAGER: LazyLock<CacheManager> = LazyLock::new(CacheManager::new);
     let success_flag = Arc::new(AtomicBool::new(false));
-    let request = DownloadRequest::new(TEST_URL);
+    let request = DownloadRequest::new(&TEST_URL);
     let info_mgr = Arc::new(DownloadInfoMgr::new());
     let handle = download_inner(
-        TaskId::from_url(TEST_URL),
+        TaskId::from_url(&TEST_URL),
         &CACHE_MANAGER,
         info_mgr,
         request,

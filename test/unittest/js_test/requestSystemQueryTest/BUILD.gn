@@ -13,7 +13,7 @@
 
 import("//build/test.gni")
 
-ohos_js_stage_unittest("requestSystemQueryTest") {
+ohos_js_stage_unittest("RequestSystemQueryTest") {
   module_out_path = "request/request/requestSystemQueryTest"
 
   hap_profile = "entry/src/main/module.json"
@@ -42,5 +42,5 @@ ohos_resources("actbmsstageetstest_resources") {
 group("unittest") {
   testonly = true
   deps = []
-  deps += [ ":requestSystemQueryTest" ]
+  deps += [ ":RequestSystemQueryTest" ]
 }

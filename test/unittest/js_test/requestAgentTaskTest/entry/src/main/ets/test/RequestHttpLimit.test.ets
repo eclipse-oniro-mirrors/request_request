@@ -816,7 +816,7 @@ export default function requestHttpLimitTest() {
      *             5. The local cache of the previous use case has been cleared
      * @tc.require: issue#IC8U1A
      */
-    it('testTimeout007', 15000, async (done: Function) => {
+    it('testTimeout007', 0, async (done: Function) => {
       try {
         // Use local server to trigger total timeout
         // Local server listens on port 8078
@@ -843,7 +843,7 @@ export default function requestHttpLimitTest() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, 15000);
 
     /**
      * @tc.number: testTimeout008

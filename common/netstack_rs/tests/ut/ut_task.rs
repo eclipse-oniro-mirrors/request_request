@@ -18,8 +18,25 @@ use super::*;
 use crate::error::HttpClientError;
 use crate::info::DownloadInfo;
 use crate::wrapper::ffi::NewHttpClientRequest;
-const TEST_URL: &str = "https://www.w3cschool.cn/statics/demosource/movie.mp4";
-const LOCAL_URL: &str = "https://127.0.0.1";
+use request_utils::test::server::{mock_server, HTTP_OK};
+use std::sync::LazyLock;
+
+// Local mock-server URLs (127.0.0.1, OS-assigned port): the historical
+// public URLs (w3cschool movie.mp4, a bdstatic range-request video, gitee
+// test.txt) are replaced so this suite never touches the network. Body
+// sizes keep the original byte counts so length assertions stay
+// meaningful. LOCAL_URL stays a connection-refused address on purpose.
+static TEST_URL: LazyLock<String> = LazyLock::new(|| mock_server(HTTP_OK, vec![b'B'; 318465]));
+static LOCAL_URL: &str = "https://127.0.0.1";
+// 50 MiB: the historical bdstatic video was slow enough that reset() landed
+// while the download was still in flight; a fast local mock needs size to
+// recreate that window, otherwise the first download completes before the
+// reset and the "restart" path is never exercised.
+const RANGE_BODY_SIZE: usize = 52428800;
+static RANGE_TEST_URL: LazyLock<String> =
+    LazyLock::new(|| mock_server(HTTP_OK, vec![b'D'; RANGE_BODY_SIZE]));
+static NOT_SUPPORT_RANGE_TEST_URL: LazyLock<String> =
+    LazyLock::new(|| mock_server(HTTP_OK, vec![b'A'; 1042003]));
 
 // @tc.name: ut_task_from_http_request
 // @tc.desc: Test creating RequestTask from HttpClientRequest
@@ -36,7 +53,7 @@ const LOCAL_URL: &str = "https://127.0.0.1";
 fn ut_task_from_http_request() {
     let mut request: cxx::UniquePtr<crate::wrapper::ffi::HttpClientRequest> =
         NewHttpClientRequest();
-    cxx::let_cxx_string!(url = TEST_URL);
+    cxx::let_cxx_string!(url = TEST_URL.as_str());
     request.pin_mut().SetURL(&url);
     cxx::let_cxx_string!(method = "GET");
     request.pin_mut().SetMethod(&method);
@@ -107,7 +124,7 @@ impl RequestCallback for TestCallback {
 fn ut_request_task_start_success() {
     let mut request: cxx::UniquePtr<crate::wrapper::ffi::HttpClientRequest> =
         NewHttpClientRequest();
-    cxx::let_cxx_string!(url = TEST_URL);
+    cxx::let_cxx_string!(url = TEST_URL.as_str());
     request.pin_mut().SetURL(&url);
     cxx::let_cxx_string!(method = "GET");
     request.pin_mut().SetMethod(&method);
@@ -125,7 +142,7 @@ fn ut_request_task_start_success() {
         result.clone(),
     ));
     let info_mgr = Arc::new(DownloadInfoMgr::new());
-    task.set_callback_with_config(callback, info_mgr, TaskId::from_url(TEST_URL), None, None, 0);
+    task.set_callback_with_config(callback, info_mgr, TaskId::from_url(TEST_URL.as_str()), None, None, 0);
     task.start();
     while !finished.load(Ordering::SeqCst) {
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -157,7 +174,7 @@ fn ut_request_task_start_success() {
 fn ut_request_task_cancel() {
     let mut request: cxx::UniquePtr<crate::wrapper::ffi::HttpClientRequest> =
         NewHttpClientRequest();
-    cxx::let_cxx_string!(url = TEST_URL);
+    cxx::let_cxx_string!(url = TEST_URL.as_str());
     request.pin_mut().SetURL(&url);
     cxx::let_cxx_string!(method = "GET");
     request.pin_mut().SetMethod(&method);
@@ -175,7 +192,7 @@ fn ut_request_task_cancel() {
         result.clone(),
     ));
     let info_mgr = Arc::new(DownloadInfoMgr::new());
-    task.set_callback_with_config(callback, info_mgr, TaskId::from_url(TEST_URL), None, None, 0);
+    task.set_callback_with_config(callback, info_mgr, TaskId::from_url(TEST_URL.as_str()), None, None, 0);
     task.start();
     std::thread::sleep(std::time::Duration::from_millis(1));
     task.cancel();
@@ -296,7 +313,13 @@ fn ut_request_task_connect_timeout() {
 fn ut_request_task_timeout() {
     let mut request: cxx::UniquePtr<crate::wrapper::ffi::HttpClientRequest> =
         NewHttpClientRequest();
-    cxx::let_cxx_string!(url = TEST_URL);
+    // Slow in-process source: the handler delays longer than the 1s total
+    // timeout below, so the timeout path fires deterministically without
+    // any network. (The plain mock replies too fast for that.)
+    let slow_url = request_utils::test::server::test_server(|_lines| {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    });
+    cxx::let_cxx_string!(url = slow_url.as_str());
     request.pin_mut().SetURL(&url);
     cxx::let_cxx_string!(method = "GET");
     request.pin_mut().SetMethod(&method);
@@ -315,7 +338,7 @@ fn ut_request_task_timeout() {
         result.clone(),
     ));
     let info_mgr = Arc::new(DownloadInfoMgr::new());
-    task.set_callback_with_config(callback, info_mgr, TaskId::from_url(TEST_URL), None, None, 0);
+    task.set_callback_with_config(callback, info_mgr, TaskId::from_url(slow_url.as_str()), None, None, 0);
     task.start();
     while !finished.load(Ordering::SeqCst) {
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -339,8 +362,7 @@ fn ut_request_task_timeout() {
 // @tc.level: level3
 #[test]
 fn ut_request_task_reset_range() {
-    const RANGE_TEST_URL:&str = "https://vd4.bdstatic.com/mda-pm7bte3t6fs50rsh/sc/cae_h264/1702057792414494257/mda-pm7bte3t6fs50rsh.mp4?v_from_s=bdapp-author-nanjing";
-    const LENGTH: usize = 1984562;
+    const LENGTH: usize = RANGE_BODY_SIZE;
     struct RestartTest {
         finished: Arc<AtomicBool>,
         data_receive: Arc<AtomicBool>,
@@ -370,7 +392,7 @@ fn ut_request_task_reset_range() {
 
     let mut request: cxx::UniquePtr<crate::wrapper::ffi::HttpClientRequest> =
         NewHttpClientRequest();
-    cxx::let_cxx_string!(url = RANGE_TEST_URL);
+    cxx::let_cxx_string!(url = RANGE_TEST_URL.as_str());
     request.pin_mut().SetURL(&url);
     cxx::let_cxx_string!(method = "GET");
     request.pin_mut().SetMethod(&method);
@@ -393,7 +415,7 @@ fn ut_request_task_reset_range() {
     task.set_callback_with_config(
         callback,
         info_mgr,
-        TaskId::from_url(RANGE_TEST_URL),
+        TaskId::from_url(RANGE_TEST_URL.as_str()),
         None,
         None,
         0,
@@ -425,8 +447,7 @@ fn ut_request_task_reset_range() {
 // @tc.level: level3
 #[test]
 fn ut_request_task_reset_not_range() {
-    const NOT_SUPPORT_RANGE_TEST_URL: &str =
-        "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt";
+    // Mock body keeps the historical gitee test.txt size (1042003 bytes).
     const LENGTH: usize = 1042003;
     struct RestartTest {
         finished: Arc<AtomicBool>,
@@ -461,7 +482,7 @@ fn ut_request_task_reset_not_range() {
 
     let mut request: cxx::UniquePtr<crate::wrapper::ffi::HttpClientRequest> =
         NewHttpClientRequest();
-    cxx::let_cxx_string!(url = NOT_SUPPORT_RANGE_TEST_URL);
+    cxx::let_cxx_string!(url = NOT_SUPPORT_RANGE_TEST_URL.as_str());
     request.pin_mut().SetURL(&url);
     cxx::let_cxx_string!(method = "GET");
     request.pin_mut().SetMethod(&method);
@@ -484,7 +505,7 @@ fn ut_request_task_reset_not_range() {
     task.set_callback_with_config(
         callback,
         info_mgr,
-        TaskId::from_url(NOT_SUPPORT_RANGE_TEST_URL),
+        TaskId::from_url(NOT_SUPPORT_RANGE_TEST_URL.as_str()),
         None,
         None,
         0,

@@ -29,6 +29,7 @@
 #include "gmock/gmock.h"
 #include "log.h"
 #include "request_preload.h"
+#include "set_permission.h"
 
 using namespace testing::ext;
 using namespace OHOS::Request;
@@ -37,6 +38,11 @@ class PreloadProgress : public testing::Test {
 public:
     void SetUp();
 };
+
+static std::string g_testUrl0;
+static std::string g_testUrl1;
+
+constexpr size_t SLEEP_INTERVAL = 1000;
 
 void PreloadProgress::SetUp(void)
 {
@@ -48,13 +54,12 @@ void PreloadProgress::SetUp(void)
     string testCaseName = string(testInfo->name());
     REQUEST_HILOGI("[SetUp] %{public}s start", testCaseName.c_str());
     GTEST_LOG_(INFO) << testCaseName.append(" start");
+    const std::string &base = GetMockBaseUrl();
+    g_testUrl0 = base + "/test.txt";
+    g_testUrl1 = base + "/";
+    std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
+    SetPermission::SetAccessTokenPermission(permissions, "preload_test");
 }
-
-static std::string g_testUrl0 = "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/"
-                                "test.txt";
-static std::string g_testUrl1 = "https://www.baidu.com";
-
-constexpr size_t SLEEP_INTERVAL = 1000;
 
 void DownloadProgressTest(std::string url)
 {

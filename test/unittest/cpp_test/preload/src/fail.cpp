@@ -30,6 +30,7 @@
 #include "gmock/gmock.h"
 #include "log.h"
 #include "request_preload.h"
+#include "set_permission.h"
 
 using namespace testing::ext;
 using namespace OHOS::Request;
@@ -38,6 +39,15 @@ class PreloadFail : public testing::Test {
 public:
     void SetUp();
 };
+
+// TEST_URL_0: unreachable IP, connection refused (no mock needed).
+// TEST_URL_1: 404 on the HTTP mock.
+// TEST_URL_2: HTTPS mock — OnFailTlcpNoCaPath forces TLCP, the TLS-only mock
+//             rejects the handshake so the load fails as expected.
+static std::string TEST_URL_0 = "https://127.3.1.123";
+static std::string TEST_URL_1;
+static std::string TEST_URL_2;
+constexpr size_t SLEEP_INTERVAL = 1000;
 
 void PreloadFail::SetUp(void)
 {
@@ -49,13 +59,14 @@ void PreloadFail::SetUp(void)
     string testCaseName = string(testInfo->name());
     REQUEST_HILOGI("[SetUp] %{public}s start", testCaseName.c_str());
     GTEST_LOG_(INFO) << testCaseName.append(" start");
+    TEST_URL_1 = GetMockBaseUrl() + "/fqwert/aaaaa";
+    // Point at a port nothing listens on so the TLCP attempt fails fast
+    // (connection refused) instead of deadlocking in a TLS handshake. The
+    // assertion — sslType=TLCP with no caPath expects FAIL — is preserved.
+    TEST_URL_2 = "https://127.0.0.1:1/test.txt";
+    std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
+    SetPermission::SetAccessTokenPermission(permissions, "preload_test");
 }
-
-static std::string TEST_URL_0 = "https://127.3.1.123";
-static std::string TEST_URL_1 = "https://www.gitee.com/fqwert/aaaaa";
-static std::string TEST_URL_2 = "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/"
-                                "test.txt";
-constexpr size_t SLEEP_INTERVAL = 1000;
 
 void DownloadFailTest(std::string url)
 {

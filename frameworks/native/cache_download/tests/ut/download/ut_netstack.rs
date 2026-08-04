@@ -24,11 +24,16 @@ mod ut_netstack {
     use netstack_rs::request::{Request, RequestCallback};
     use netstack_rs::response::Response;
     use request_utils::test::log::init;
+    use request_utils::test::server::{mock_server, HTTP_OK};
+    use std::sync::LazyLock;
 
     use super::*;
     use crate::download::netstack::{CancelHandle, DownloadTask};
     use crate::download::{CommonError, CommonHandle, CommonResponse, PrimeCallback};
     use crate::services::DownloadRequest;
+
+    // Local mock-server URL so no public network is touched.
+    static MOCK_URL: LazyLock<String> = LazyLock::new(|| mock_server(HTTP_OK, vec![0u8; 64]));
 
     // Mock for CommonResponse trait
     mock! {
@@ -208,7 +213,7 @@ mod ut_netstack {
     fn ut_cancel_handle_cancel() {
         init();
         let mut request = Request::new();
-        request.url("http://www.example.com");
+        request.url(&MOCK_URL);
         let callback = MockPrimeCallback::new("test_task_id");
         request.callback(callback);
         request.info_mgr(Arc::new(DownloadInfoMgr::new()));
@@ -238,7 +243,7 @@ mod ut_netstack {
     fn ut_cancel_handle_add_count() {
         init();
         let mut request = Request::new();
-        request.url("http://www.example.com");
+        request.url(&MOCK_URL);
         let callback = MockPrimeCallback::new("test_task_id");
         request.callback(callback);
         request.info_mgr(Arc::new(DownloadInfoMgr::new()));
@@ -266,7 +271,7 @@ mod ut_netstack {
     #[test]
     fn ut_download_task_run_valid_url() {
         init();
-        let request = DownloadRequest::new("http://www.example.com");
+        let request = DownloadRequest::new(&MOCK_URL);
         let callback = MockPrimeCallback::new("test_task_id");
         let info_mgr = Arc::new(DownloadInfoMgr::new());
 
@@ -312,7 +317,7 @@ mod ut_netstack {
         init();
         let callback = Arc::new(Mutex::new(MockPrimeCallback::new("test_task_id")));
         let mut request = Request::new();
-        request.url("http://www.example.com");
+        request.url(&MOCK_URL);
         request.callback(callback.clone());
         request.info_mgr(Arc::new(DownloadInfoMgr::new()));
 
@@ -377,7 +382,7 @@ mod ut_netstack {
     fn ut_cancel_handle_reset() {
         init();
         let mut request = Request::new();
-        request.url("http://www.example.com");
+        request.url(&MOCK_URL);
         let callback = MockPrimeCallback::new("test_task_id");
         request.callback(callback);
         request.info_mgr(Arc::new(DownloadInfoMgr::new()));
@@ -409,7 +414,7 @@ mod ut_netstack {
         headers.insert("User-Agent".to_string(), "Mozilla/5.0".to_string());
         headers.insert("Accept".to_string(), "application/json".to_string());
         let request = DownloadRequest {
-            url: "http://www.example.com".to_string(),
+            url: &MOCK_URL,
             headers: Some(headers),
         };
         let callback = MockPrimeCallback::new("test_task_id");
@@ -435,7 +440,7 @@ mod ut_netstack {
         init();
         let mut callback = MockPrimeCallback::new("test_task_id");
         let mut request = Request::new();
-        request.url("http://www.example.com");
+        request.url(&MOCK_URL);
         request.header("transfer-encoding", "chunked");
         let task = request.build().unwrap();
         callback.on_data_receive(&[1, 2, 3], task);
@@ -458,7 +463,7 @@ mod ut_netstack {
         init();
         let mut callback = MockPrimeCallback::new("test_task_id");
         let mut request = Request::new();
-        request.url("http://www.example.com");
+        request.url(&MOCK_URL);
         request.header("content-length", "100");
         let task = request.build().unwrap();
         callback.on_data_receive(&[1, 2, 3], task);
@@ -481,7 +486,7 @@ mod ut_netstack {
         init();
         let mut callback = MockPrimeCallback::new("test_task_id");
         let mut request = Request::new();
-        request.url("http://www.example.com");
+        request.url(&MOCK_URL);
         let task = request.build().unwrap();
         callback.on_data_receive(&[1, 2, 3], task);
         assert_eq!(callback.data_receive_flag.load(Ordering::SeqCst), 1);

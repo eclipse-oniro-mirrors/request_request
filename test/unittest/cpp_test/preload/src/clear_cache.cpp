@@ -31,6 +31,7 @@
 #include "gmock/gmock.h"
 #include "log.h"
 #include "request_preload.h"
+#include "set_permission.h"
 using namespace testing::ext;
 using namespace OHOS::Request;
 
@@ -53,6 +54,9 @@ void PreloadClearCache::SetUp(void)
     string testCaseName = string(testInfo->name());
     REQUEST_HILOGI("[SetUp] %{public}s start", testCaseName.c_str());
     GTEST_LOG_(INFO) << testCaseName.append(" start");
+    TEST_URL_0 = GetMockBaseUrl() + "/test.txt";
+    std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
+    SetPermission::SetAccessTokenPermission(permissions, "preload_test");
 }
 
 /**

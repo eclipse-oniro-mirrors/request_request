@@ -36,6 +36,16 @@ use crate::tests::{lock_database, test_init};
 
 const GITEE_FILE_LEN: usize = 1042003;
 
+// Local mock-server URL (127.0.0.1, OS-assigned port) with the same body
+// size as the historical gitee test.txt, so the notifier suite never
+// touches the network while its length expectations stay meaningful.
+static MOCK_TXT_URL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    request_utils::test::server::mock_server(
+        request_utils::test::server::HTTP_OK,
+        vec![b'A'; GITEE_FILE_LEN],
+    )
+});
+
 fn init_manager() -> (TaskManager, UnboundedReceiver<ClientEvent>) {
     let (tx, rx) = unbounded_channel();
     let task_manager_tx = TaskManagerTx::new(tx);
@@ -170,7 +180,7 @@ fn ut_notify_progress() {
     .retry(true)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt")
+    .url(MOCK_TXT_URL.as_str())
     .redirect(true)
     .build();
     let uid = config.common_data.uid;
@@ -235,7 +245,7 @@ fn ut_notify_pause_resume() {
     .retry(true)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt")
+    .url(MOCK_TXT_URL.as_str())
     .redirect(true)
     .build();
     let uid = config.common_data.uid;
@@ -297,7 +307,7 @@ fn ut_notify_remove() {
     .retry(true)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt")
+    .url(MOCK_TXT_URL.as_str())
     .redirect(true)
     .build();
     let uid = config.common_data.uid;
@@ -344,7 +354,7 @@ fn ut_notify_completed() {
     .retry(true)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt")
+    .url(MOCK_TXT_URL.as_str())
     .redirect(true)
     .build();
     let uid = config.common_data.uid;
@@ -392,7 +402,7 @@ fn ut_notify_failed() {
     .retry(true)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt")
+    .url(MOCK_TXT_URL.as_str())
     .redirect(true)
     .build();
     let uid = config.common_data.uid;
@@ -440,7 +450,7 @@ fn ut_notify_pause_resume_completed() {
     .retry(true)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt")
+    .url(MOCK_TXT_URL.as_str())
     .redirect(true)
     .build();
     let uid = config.common_data.uid;
@@ -488,7 +498,7 @@ fn ut_notify_pause_resume_failed() {
     .retry(true)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt")
+    .url(MOCK_TXT_URL.as_str())
     .redirect(true)
     .build();
     let uid = config.common_data.uid;

@@ -27,6 +27,9 @@
 #include "dir_operations.h"
 #include "log.h"
 #include "request_preload.h"
+#include "set_permission.h"
+
+#include <openssl/sha.h>
 
 using namespace testing::ext;
 using namespace OHOS::Request;
@@ -38,8 +41,12 @@ const std::string IMAGE_FILE_CACHE_DIR = "image_file_cache";
 const std::string PRELOAD_CACHE = "preload_caches";
 const std::string DEFAULT_CACHE_PATH = "/data/storage/el2/base/cache";
 constexpr size_t SLEEP_INTERVAL = 100;
-static std::string TEST_URL_0 = "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt";
-const std::string URL_FILE_NAME = "d506dca3cf0894bdbbd0e9310a51b9b7bf7845431e4077a96adb70662ff9749f_F";
+// Hex-encoding constants for the SHA256(url) file-name computation.
+constexpr int HEX_CHARS_PER_BYTE = 2;          // one byte -> two hex chars
+constexpr int BITS_PER_HEX_CHAR = 4;           // shift for the high nibble
+constexpr unsigned char HEX_NIBBLE_MASK = 0x0f; // low nibble mask
+static std::string TEST_URL_0;
+static std::string g_urlFileName;  // SHA256(url) + "_F", computed in SetUp
 class FileCachePath : public testing::Test {
 public:
     void SetUp();
@@ -55,6 +62,20 @@ void FileCachePath::SetUp(void)
     string testCaseName = string(testInfo->name());
     REQUEST_HILOGI("[SetUp] %{public}s start", testCaseName.c_str());
     GTEST_LOG_(INFO) << testCaseName.append(" start");
+    std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
+    SetPermission::SetAccessTokenPermission(permissions, "inotify_image_test");
+    TEST_URL_0 = GetMockBaseUrl() + "/test.txt";
+    // Cache file name = SHA256(url) + "_F" (matches preload's naming).
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char *>(TEST_URL_0.data()), TEST_URL_0.size(), hash);
+    std::string hex;
+    hex.reserve(SHA256_DIGEST_LENGTH * HEX_CHARS_PER_BYTE);
+    static const char *digits = "0123456789abcdef";
+    for (unsigned char c : hash) {
+        hex.push_back(digits[c >> BITS_PER_HEX_CHAR]);
+        hex.push_back(digits[c & HEX_NIBBLE_MASK]);
+    }
+    g_urlFileName = hex + "_F";
 }
 
 std::string GetCacheDir()
@@ -120,7 +141,7 @@ HWTEST_F(FileCachePath, SetFileCachePathTest, TestSize.Level1)
 
     EXPECT_TRUE(flagP->load());
     EXPECT_TRUE(flagS->load());
-    std::string filePath = GetCacheDir() + SLASH + URL_FILE_NAME;
+    std::string filePath = GetCacheDir() + SLASH + g_urlFileName;
     bool existBefore = DirOperation::IsFileExist(filePath);
     ASSERT_TRUE(existBefore);
     bool dirRemoved = DirOperation::RemoveDir(cacheDir);

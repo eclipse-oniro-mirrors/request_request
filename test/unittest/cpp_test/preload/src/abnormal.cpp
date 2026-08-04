@@ -29,6 +29,7 @@
 #include "gmock/gmock.h"
 #include "log.h"
 #include "request_preload.h"
+#include "set_permission.h"
 using namespace testing::ext;
 using namespace OHOS::Request;
 
@@ -37,7 +38,11 @@ static std::string TEST_URL_0 = "https://www.gitee.com/tiga-ultraman/downloadTes
 static std::string TEST_URL_1 = "https://www.gitee.com/fqwert/aaaaaa";
 
 constexpr size_t SLEEP_INTERVAL = 1000;
-constexpr size_t ABNORMAL_INTERVAL = 24;
+// Poll interval for the releaseable block. Block callbacks spin on a per-case
+// atomic flag instead of sleeping a fixed 24h, so the blocking thread exits the
+// moment the case finishes and never leaks into the next case (which otherwise
+// starves the callback worker pool and cascades timeouts across the suite).
+constexpr auto BLOCK_POLL_INTERVAL = std::chrono::milliseconds(100);
 
 class PreloadAbnormal : public testing::Test {
 public:
@@ -54,6 +59,11 @@ void PreloadAbnormal::SetUp(void)
     string testCaseName = string(testInfo->name());
     REQUEST_HILOGI("[SetUp] %{public}s start", testCaseName.c_str());
     GTEST_LOG_(INFO) << testCaseName.append(" start");
+    const std::string &base = GetMockBaseUrl();
+    TEST_URL_0 = base + "/test.txt";
+    TEST_URL_1 = base + "/fqwert/aaaaaa";
+    std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
+    SetPermission::SetAccessTokenPermission(permissions, "preload_test");
 }
 
 /**
@@ -133,10 +143,15 @@ HWTEST_F(PreloadAbnormal, SuccessBlockCallbackTest, TestSize.Level1)
 {
     auto url = TEST_URL_0;
     Preload::GetInstance()->Remove(url);
+    // Release flag lets the blocking callback exit the moment the case is done,
+    // so the worker thread is reclaimed instead of sleeping 24h past case end.
+    auto release = std::make_shared<std::atomic_bool>(false);
     auto abnormal_callback = PreloadCallback{
         .OnSuccess =
-            [](const std::shared_ptr<Data> &&data, const std::string &taskId) {
-                std::this_thread::sleep_for(std::chrono::hours(ABNORMAL_INTERVAL));
+            [release](const std::shared_ptr<Data> &&data, const std::string &taskId) {
+                while (!release->load()) {
+                    std::this_thread::sleep_for(BLOCK_POLL_INTERVAL);
+                }
             },
     };
     auto handle = Preload::GetInstance()->load(url, std::make_unique<PreloadCallback>(abnormal_callback));
@@ -156,6 +171,7 @@ HWTEST_F(PreloadAbnormal, SuccessBlockCallbackTest, TestSize.Level1)
     EXPECT_TRUE(flagS->load());
     EXPECT_EQ(handle->GetState(), PreloadState::SUCCESS);
     Preload::GetInstance()->Remove(url);
+    release->store(true);
 }
 
 /**
@@ -175,10 +191,13 @@ HWTEST_F(PreloadAbnormal, FailBlockCallbackTest, TestSize.Level1)
 {
     auto url = TEST_URL_1;
     Preload::GetInstance()->Remove(url);
+    auto release = std::make_shared<std::atomic_bool>(false);
     auto abnormal_callback = PreloadCallback{
         .OnFail =
-            [](const PreloadError &error, const std::string &taskId) {
-                std::this_thread::sleep_for(std::chrono::hours(ABNORMAL_INTERVAL));
+            [release](const PreloadError &error, const std::string &taskId) {
+                while (!release->load()) {
+                    std::this_thread::sleep_for(BLOCK_POLL_INTERVAL);
+                }
             },
     };
     auto handle = Preload::GetInstance()->load(url, std::make_unique<PreloadCallback>(abnormal_callback));
@@ -198,6 +217,7 @@ HWTEST_F(PreloadAbnormal, FailBlockCallbackTest, TestSize.Level1)
     EXPECT_FALSE(flagS->load());
     EXPECT_EQ(handle->GetState(), PreloadState::FAIL);
     Preload::GetInstance()->Remove(url);
+    release->store(true);
 }
 
 /**
@@ -217,8 +237,13 @@ HWTEST_F(PreloadAbnormal, CancelBlockCallbackTest, TestSize.Level1)
 {
     auto url = TEST_URL_1;
     Preload::GetInstance()->Remove(url);
+    auto release = std::make_shared<std::atomic_bool>(false);
     auto abnormal_callback = PreloadCallback{
-        .OnCancel = []() { std::this_thread::sleep_for(std::chrono::hours(ABNORMAL_INTERVAL)); },
+        .OnCancel = [release]() {
+            while (!release->load()) {
+                std::this_thread::sleep_for(BLOCK_POLL_INTERVAL);
+            }
+        },
     };
     auto handle = Preload::GetInstance()->load(url, std::make_unique<PreloadCallback>(abnormal_callback));
 
@@ -240,6 +265,7 @@ HWTEST_F(PreloadAbnormal, CancelBlockCallbackTest, TestSize.Level1)
     EXPECT_FALSE(flagS->load());
     EXPECT_EQ(handle->GetState(), PreloadState::CANCEL);
     Preload::GetInstance()->Remove(url);
+    release->store(true);
 }
 
 /**
@@ -259,9 +285,13 @@ HWTEST_F(PreloadAbnormal, ProgressBlockCallbackTest, TestSize.Level1)
 {
     auto url = TEST_URL_0;
     Preload::GetInstance()->Remove(url);
+    auto release = std::make_shared<std::atomic_bool>(false);
     auto abnormal_callback = PreloadCallback{
-        .OnProgress = [](uint64_t current,
-                          uint64_t total) { std::this_thread::sleep_for(std::chrono::hours(ABNORMAL_INTERVAL)); },
+        .OnProgress = [release](uint64_t current, uint64_t total) {
+            while (!release->load()) {
+                std::this_thread::sleep_for(BLOCK_POLL_INTERVAL);
+            }
+        },
     };
     auto handle = Preload::GetInstance()->load(url, std::make_unique<PreloadCallback>(abnormal_callback));
 
@@ -281,4 +311,5 @@ HWTEST_F(PreloadAbnormal, ProgressBlockCallbackTest, TestSize.Level1)
     EXPECT_TRUE(flagS->load());
     EXPECT_EQ(handle->GetState(), PreloadState::SUCCESS);
     Preload::GetInstance()->Remove(url);
+    release->store(true);
 }

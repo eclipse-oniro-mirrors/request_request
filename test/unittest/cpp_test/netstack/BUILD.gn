@@ -19,6 +19,7 @@ ohos_unittest("common_netstack_test") {
   include_dirs = [
     "../../../../common/include",
     "../../../../common/netstack_rs/include",
+    "../../common/mock_server/include",
   ]
 
   sources = [
@@ -38,6 +39,7 @@ ohos_unittest("common_netstack_test") {
 
   deps = [
     "../../common/dir_operation:common_dir_op",
+    "../../common/mock_server:mock_server",
     "../../common/set_permission:common_permission",
   ]
 }

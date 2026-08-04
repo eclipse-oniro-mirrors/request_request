@@ -27,6 +27,7 @@
 #include "gmock/gmock.h"
 #include "log.h"
 #include "request_preload.h"
+#include "set_permission.h"
 #include "utf8_utils.h"
 using namespace testing::ext;
 using namespace OHOS::Request;
@@ -35,6 +36,14 @@ class PreloadCancel : public testing::Test {
 public:
     void SetUp();
 };
+
+// Pointed at the in-process mock server in SetUp; defaults keep old shape.
+static std::string TEST_URL_0;
+static std::string TEST_URL_1;
+static std::string TEST_URL_2;
+static std::string TEST_URL_3;
+
+constexpr size_t SLEEP_INTERVAL = 1000;
 
 void PreloadCancel::SetUp(void)
 {
@@ -46,17 +55,14 @@ void PreloadCancel::SetUp(void)
     string testCaseName = string(testInfo->name());
     REQUEST_HILOGI("[SetUp] %{public}s start", testCaseName.c_str());
     GTEST_LOG_(INFO) << testCaseName.append(" start");
+    const std::string &base = GetMockBaseUrl();
+    TEST_URL_0 = base + "/test.txt";
+    TEST_URL_1 = base + "/movie.mp4";
+    TEST_URL_2 = base + "/";
+    TEST_URL_3 = base + "/bdstatic.mp4";
+    std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
+    SetPermission::SetAccessTokenPermission(permissions, "preload_test");
 }
-
-static std::string TEST_URL_0 = "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/"
-                                "test.txt";
-static std::string TEST_URL_1 = "https://www.w3cschool.cn/statics/demosource/movie.mp4";
-static std::string TEST_URL_2 = "https://www.baidu.com";
-static std::string TEST_URL_3 = "https://vd4.bdstatic.com/mda-pm7bte3t6fs50rsh/sc/cae_h264/"
-                                "1702057792414494257/"
-                                "mda-pm7bte3t6fs50rsh.mp4?v_from_s=bdapp-author-nanjing";
-
-constexpr size_t SLEEP_INTERVAL = 1000;
 
 void DownloadCancelTest(std::string url)
 {

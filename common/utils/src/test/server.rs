@@ -18,8 +18,16 @@
 //! a fixed `200 OK` response. Used by integration tests that need a real
 //! network endpoint to exercise download/upload logic.
 
-use std::io::{BufRead, BufReader, Lines, Write};
+use std::io::{BufRead, BufReader, Lines, Read, Write};
 use std::net::{TcpListener, TcpStream};
+
+/// HTTP 200 (OK) for [`mock_server`] callers.
+pub const HTTP_OK: u16 = 200;
+/// HTTP 404 (Not Found) for [`mock_server`] callers.
+pub const HTTP_NOT_FOUND: u16 = 404;
+
+/// Size of the buffer used to drain request headers before replying.
+const READ_BUF_SIZE: usize = 4096;
 
 pub fn test_server<F>(f: F) -> String
 where
@@ -47,3 +55,40 @@ where
     let response = "HTTP/1.1 200 OK\r\n\r\n";
     stream.write_all(response.as_bytes()).unwrap();
 }
+
+/// Start a multi-connection mock HTTP server returning a fixed response.
+///
+/// Unlike `test_server`, this keeps accepting connections so retry/concurrent
+/// loads work, and lets the caller pick the status code and body. Returns the
+/// base URL, e.g. "http://127.0.0.1:38211".
+pub fn mock_server(status: u16, body: Vec<u8>) -> String {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let reason = match status {
+        HTTP_OK => "OK",
+        HTTP_NOT_FOUND => "Not Found",
+        _ => "OK",
+    };
+    std::thread::spawn(move || {
+        for incoming in listener.incoming() {
+            if incoming.is_err() {
+                break;
+            }
+            let mut stream = incoming.unwrap();
+            // Drain the request headers so the client can send its full request.
+            let mut buf = [0u8; READ_BUF_SIZE];
+            let _ = stream.read(&mut buf);
+            let header = format!(
+                "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                status,
+                reason,
+                body.len()
+            );
+            let mut resp = header.into_bytes();
+            resp.extend_from_slice(&body);
+            let _ = stream.write_all(&resp);
+        }
+    });
+    format!("http://{}", addr)
+}
+
