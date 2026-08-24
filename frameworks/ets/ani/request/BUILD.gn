@@ -19,6 +19,7 @@ rust_cxx("request_ani_cxx_gen") {
 }
 
 ohos_rust_shared_library("request_ani") {
+  version_script = "librequest_ani.map"
   sanitize = {
     cfi = true
     cfi_cross_dso = true

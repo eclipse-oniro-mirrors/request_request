@@ -75,6 +75,8 @@ ohos_rust_shared_ffi("preload_native_rust") {
     "-Ccodegen-units=1",
   ]
 
+  version_script = "libpreload_native_rust.map"
+
   sources = [ "src/lib.rs" ]
   deps = [
     ":preload_native_static",
@@ -124,6 +126,8 @@ ohos_shared_library("preload_native") {
     debug = false
   }
 
+  version_script = "libpreload_native.map"
+
   sources = [
     "src/cxx/preload_callback.cpp",
     "src/cxx/request_preload.cpp",
@@ -164,6 +168,8 @@ ohos_static_library("preload_native_static") {
   }
 
   public_configs = [ ":preload_native_config" ]
+
+  cflags = [ "-fvisibility=hidden" ]
 
   sources = [
     "src/cxx/preload_callback.cpp",
