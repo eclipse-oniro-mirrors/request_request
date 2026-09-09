@@ -58,6 +58,7 @@ private:
     static bool ParseAction(napi_env env, napi_value jsConfig, Action &action, std::string &errInfo);
     static bool ParseUrl(napi_env env, napi_value jsConfig, std::string &url, std::string &errInfo);
     static bool ParseNotification(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo);
+    static bool ParseNotificationWantAgent(napi_env env, napi_value notification, Config &config);
     static bool ParseMinSpeed(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo);
     static bool ParseProxy(napi_env env, napi_value jsConfig, std::string &proxy, std::string &errInfo);
     static bool ParseCertsPath(

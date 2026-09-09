@@ -211,6 +211,8 @@ pub struct Notification<'local> {
     pub visibility: Option<i32>,
     /// Optional Want agent invoked when the notification is tapped.
     pub want_agent: Option<AniObject<'local>>,
+    /// Whether to hide the stop button on the notification bar.
+    pub hide_stop_button: Option<bool>,
 }
 
 /// Represents different data types for request body content.
@@ -222,6 +224,7 @@ impl From<Notification<'_>> for request_core::config::Notification {
             disable: value.disable,
             visibility: value.visibility,
             want_agent: None,
+            hide_stop_button: value.hide_stop_button,
         }
     }
 }
@@ -890,6 +893,7 @@ impl From<Config<'_>> for TaskConfig {
                     disable: None,
                     visibility: None,
                     want_agent: None,
+                    hide_stop_button: None,
                 },
             ),
             min_speed: value

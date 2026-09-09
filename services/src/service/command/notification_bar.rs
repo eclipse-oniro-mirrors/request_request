@@ -89,6 +89,15 @@ impl RequestServiceStub {
 
         let visibility = data.read()?;
 
+        // Read hide_stop_button flag + value (client writes flag then value; old
+        // clients omit the field entirely, default to false).
+        let hide_stop_button = match data.read::<bool>() {
+            Ok(true) => data.read::<bool>()?,
+            Ok(false) => false,
+            Err(_) => false,
+        };
+        info!("Service create_group hide_stop_button = {}", hide_stop_button);
+
         // Record the caller UID as the group owner; attach_group / delete_group
         // verify ownership against it later.
         let uid = ipc::Skeleton::calling_uid();
@@ -105,7 +114,7 @@ impl RequestServiceStub {
         }
 
         let new_group_id = NotificationDispatcher::get_instance().create_group(
-            gauge, title, text, want_agent, disable, visibility, uid);
+            gauge, title, text, want_agent, disable, visibility, hide_stop_button, uid);
         reply.write(&new_group_id.to_string())?;
         Ok(())
     }

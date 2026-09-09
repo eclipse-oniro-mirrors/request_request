@@ -85,6 +85,19 @@ napi_status ValidateAndSetDisable(CreateContext *context, napi_value customized)
     return napi_ok;
 }
 
+napi_status ValidateAndSetHideStopButton(CreateContext *context, napi_value customized)
+{
+    if (NapiUtils::HasNamedProperty(context->env_, customized, "hideStopButton")) {
+        napi_value hideStopButton = NapiUtils::GetNamedProperty(context->env_, customized, "hideStopButton");
+        if (NapiUtils::GetValueType(context->env_, hideStopButton) == napi_boolean) {
+            bool value = false;
+            napi_get_value_bool(context->env_, hideStopButton, &value);
+            context->notification.hideStopButton = value;
+        }
+    }
+    return napi_ok;
+}
+
 napi_status ValidateAndSetVisibility(CreateContext *context, napi_value customized)
 {
     if (NapiUtils::HasNamedProperty(context->env_, customized, "visibility")) {
@@ -163,7 +176,12 @@ napi_status createNotificationParse(CreateContext *context, napi_value customize
     if (status != napi_ok) {
         return status;
     }
-    
+
+    status = ValidateAndSetHideStopButton(context, customized);
+    if (status != napi_ok) {
+        return status;
+    }
+
     return napi_ok;
 }
 

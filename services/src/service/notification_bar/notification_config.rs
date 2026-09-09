@@ -37,10 +37,12 @@ pub(crate) struct NotificationConfig {
     /// Whether to disable the notification completely.
     pub(crate) disable: bool,
     /// Bitmask controlling which notification elements are visible.
-    /// 
+    ///
     /// * `0b01` - Controls visibility of completion status
     /// * `0b10` - Controls visibility of progress information
     pub(crate) visibility: u32,
+    /// Whether to hide the stop button on the notification bar.
+    pub(crate) hide_stop_button: bool,
 }
 
 #[cfg(test)]
@@ -57,9 +59,10 @@ impl NotificationConfig {
     /// * `want_agent` - Optional WantAgent for click handling
     /// * `disable` - Whether to disable the notification
     /// * `visibility` - Bitmask for visibility settings
-    /// 
+    /// * `hide_stop_button` - Whether to hide the stop button
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new `NotificationConfig` instance with the provided configuration
     pub(crate) fn new(
         task_id: u32,
@@ -68,6 +71,7 @@ impl NotificationConfig {
         want_agent: Option<String>,
         disable: bool,
         visibility: u32,
+        hide_stop_button: bool,
     ) -> Self {
         Self {
             task_id,
@@ -76,6 +80,7 @@ impl NotificationConfig {
             want_agent,
             disable,
             visibility,
+            hide_stop_button,
         }
     }
 }
@@ -115,6 +120,15 @@ impl Deserialize for NotificationConfig {
         let disable = parcel.read::<bool>()?;
         let visibility = parcel.read::<u32>()?;
 
+        // Read hide_stop_button using a flag followed by the value if flag is true.
+        // Old clients that predate this field leave the parcel exhausted here; treat
+        // that as hide_stop_button=false so backward-compatible tasks still succeed.
+        let hide_stop_button = match parcel.read::<bool>() {
+            Ok(true) => parcel.read::<bool>()?,
+            Ok(false) => false,
+            Err(_) => false,
+        };
+
         // Note: task_id is initialized to 0 here and will be set externally
         // after deserialization
         let config = NotificationConfig {
@@ -124,6 +138,7 @@ impl Deserialize for NotificationConfig {
             want_agent,
             disable,
             visibility,
+            hide_stop_button,
         };
         Ok(config)
     }

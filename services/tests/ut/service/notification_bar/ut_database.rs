@@ -16,6 +16,7 @@ use ylong_runtime::fastrand::fast_random;
 use super::*;
 use crate::service::notification_bar::{NotificationConfig, NotificationDispatcher};
 use std::time::{SystemTime, UNIX_EPOCH};
+use ipc::parcel::{Deserialize, MsgParcel};
 const TEST_TITLE: &str = "田文镜";
 const TEST_TEXT: &str = "我XXX";
 const TEST_WANT_AGENT: &str = "wantAgent";
@@ -94,6 +95,7 @@ fn ut_notify_database_query_task_customized() {
         Some(TEST_WANT_AGENT.to_string()),
         false,
         0b01,
+        false,
     );
 
     db.update_task_customized_notification(&config);
@@ -125,11 +127,78 @@ fn ut_notify_database_query_group_customized() {
         Some(TEST_TITLE.to_string()),
         Some(TEST_TEXT.to_string()),
         Some(TEST_WANT_AGENT.to_string()),
+        false,
     );
     let customized = db.query_group_customized_notification(group_id).unwrap();
     assert_eq!(customized.title.unwrap(), TEST_TITLE);
     assert_eq!(customized.text.unwrap(), TEST_TEXT);
     assert_eq!(customized.want_agent.unwrap(), TEST_WANT_AGENT);
+}
+
+// @tc.name: ut_notify_database_hide_stop_button
+// @tc.desc: Test hide_stop_button persistence for task and group customized notification
+// @tc.precon: NA
+// @tc.step: 1. Create a NotificationDb instance
+//           2. Update task/group customized notification with hide_stop_button=true
+//           3. Query back and verify hide_stop_button is true
+// @tc.expect: hide_stop_button round-trips correctly through the database
+// @tc.type: FUNC
+// @tc.require: issues#ICN16H
+#[test]
+fn ut_notify_database_hide_stop_button() {
+    let db = NotificationDb::new();
+    let task_id = fast_random() as u32;
+    let config = NotificationConfig::new(
+        task_id,
+        None,
+        None,
+        None,
+        false,
+        0b01,
+        true,
+    );
+    db.update_task_customized_notification(&config);
+    let customized = db.query_task_customized_notification(task_id).unwrap();
+    assert!(customized.hide_stop_button);
+
+    let group_id = fast_random() as u32;
+    db.update_group_customized_notification(group_id, None, None, None, true);
+    let group_customized = db.query_group_customized_notification(group_id).unwrap();
+    assert!(group_customized.hide_stop_button);
+}
+
+// @tc.name: ut_notify_config_deserialize_hide_stop_button
+// @tc.desc: Test NotificationConfig deserialize for hide_stop_button default and explicit values
+// @tc.precon: NA
+// @tc.step: 1. Build a parcel without hide_stop_button (old client) -> deserialize to false
+//           2. Build a parcel with hide_stop_button=true -> deserialize to true
+// @tc.expect: Default (old parcel) yields false; explicit true yields true
+// @tc.type: FUNC
+// @tc.require: issues#ICN16H
+#[test]
+fn ut_notify_config_deserialize_hide_stop_button() {
+    // Old client parcel without hide_stop_button -> default false
+    let mut parcel = MsgParcel::new();
+    parcel.write(&false).unwrap(); // title flag
+    parcel.write(&false).unwrap(); // text flag
+    parcel.write(&false).unwrap(); // want_agent flag
+    parcel.write(&false).unwrap(); // disable
+    parcel.write(&1u32).unwrap();  // visibility
+    parcel.write(&false).unwrap(); // hide_stop_button flag absent
+    let config = NotificationConfig::deserialize(&mut parcel).unwrap();
+    assert!(!config.hide_stop_button);
+
+    // Explicit hide_stop_button=true
+    let mut parcel = MsgParcel::new();
+    parcel.write(&false).unwrap(); // title flag
+    parcel.write(&false).unwrap(); // text flag
+    parcel.write(&false).unwrap(); // want_agent flag
+    parcel.write(&false).unwrap(); // disable
+    parcel.write(&1u32).unwrap();  // visibility
+    parcel.write(&true).unwrap();  // has hide_stop_button
+    parcel.write(&true).unwrap();  // hide_stop_button value
+    let config = NotificationConfig::deserialize(&mut parcel).unwrap();
+    assert!(config.hide_stop_button);
 }
 
 // @tc.name: ut_notify_database_group_config
@@ -247,7 +316,7 @@ fn ut_clear_task_info() {
 
     let group_id = fast_random() as u32;
     let task_id = fast_random() as u32;
-    let config = NotificationConfig::new(task_id, None, None, None, true, 0b01);
+    let config = NotificationConfig::new(task_id, None, None, None, true, 0b01, false);
 
     db.disable_task_notification(task_id);
     db.update_task_customized_notification(&config);
@@ -283,7 +352,7 @@ fn ut_clear_group_info() {
 
     let group_id = fast_random() as u32;
     let task_id = fast_random() as u32;
-    db.update_group_customized_notification(group_id, None, None, None);
+    db.update_group_customized_notification(group_id, None, None, None, false);
     db.update_group_config(group_id, true, 0, false, 0b01, TEST_UID);
     db.update_task_group(task_id, group_id);
 
@@ -321,7 +390,7 @@ fn ut_clear_group_info_a_week_ago() {
     let group_id = fast_random() as u32;
     let task_id = fast_random() as u32;
 
-    db.update_group_customized_notification(group_id, None, None, None);
+    db.update_group_customized_notification(group_id, None, None, None, false);
     db.update_group_config(group_id, true, current_time, false, 0b01, TEST_UID);
 
     db.clear_group_info_a_week_ago();
@@ -368,6 +437,7 @@ fn ut_notify_database_visibility() {
         None,
         false,
         0b00,
+        false,
     );
     db.update_task_customized_notification(&config);
     assert!(db.is_completion_visible(task_id));
@@ -380,6 +450,7 @@ fn ut_notify_database_visibility() {
         None,
         false,
         0b01,
+        false,
     );
     db.update_task_customized_notification(&config);
     assert!(db.is_completion_visible(task_id));
@@ -392,6 +463,7 @@ fn ut_notify_database_visibility() {
         None,
         false,
         0b10,
+        false,
     );
     db.update_task_customized_notification(&config);
     assert!(!db.is_completion_visible(task_id));
@@ -404,6 +476,7 @@ fn ut_notify_database_visibility() {
         None,
         false,
         0b11,
+        false,
     );
     db.update_task_customized_notification(&config);
     assert!(db.is_completion_visible(task_id));
@@ -455,6 +528,7 @@ fn ut_notify_database_want_agent() {
         Some(TEST_WANT_AGENT.to_string()),
         false,
         0b00,
+        false,
     );
     db.update_task_customized_notification(&config);
     let customized = db.query_task_customized_notification(task_id).unwrap();
@@ -468,6 +542,7 @@ fn ut_notify_database_want_agent() {
         Some(updated_want_agent.to_string()),
         false,
         0b00,
+        false,
     );
     db.update_task_customized_notification(&config);
     let customized = db.query_task_customized_notification(task_id).unwrap();
@@ -481,6 +556,7 @@ fn ut_notify_database_want_agent() {
         None,
         false,
         0b00,
+        false,
     );
     db.update_task_customized_notification(&config);
     let customized = db.query_task_customized_notification(task_id).unwrap();
@@ -493,6 +569,7 @@ fn ut_notify_database_want_agent() {
         None,
         None,
         Some(TEST_WANT_AGENT.to_string()),
+        false,
     );
     let customized = db.query_group_customized_notification(group_id).unwrap();
     assert_eq!(customized.want_agent.unwrap(), TEST_WANT_AGENT);
@@ -503,6 +580,7 @@ fn ut_notify_database_want_agent() {
         None,
         None,
         Some(updated_want_agent.to_string()),
+        false,
     );
     let customized = db.query_group_customized_notification(group_id).unwrap();
     assert_eq!(customized.want_agent.unwrap(), updated_want_agent);
@@ -513,6 +591,7 @@ fn ut_notify_database_want_agent() {
         None,
         None,
         None,
+        false,
     );
     let customized = db.query_group_customized_notification(group_id).unwrap();
     assert!(customized.want_agent.is_none());
@@ -523,6 +602,7 @@ fn ut_notify_database_want_agent() {
         Some("title".to_string()),
         Some("text".to_string()),
         Some(TEST_WANT_AGENT.to_string()),
+        false,
     );
     // Update only title and text, want_agent should remain
     db.update_group_customized_notification(
@@ -530,6 +610,7 @@ fn ut_notify_database_want_agent() {
         Some("new_title".to_string()),
         Some("new_text".to_string()),
         None,
+        false,
     );
     let customized = db.query_group_customized_notification(group_id).unwrap();
     assert_eq!(customized.title.unwrap(), "new_title");

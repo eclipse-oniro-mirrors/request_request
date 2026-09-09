@@ -87,6 +87,14 @@ impl RequestProxy {
             }
         }
 
+        // Serialize hide_stop_button
+        if let Some(hide_stop_button) = notification.hide_stop_button {
+            data.write(&true).unwrap();
+            data.write(&hide_stop_button).unwrap();
+        } else {
+            data.write(&false).unwrap();
+        }
+
         let mut reply = remote
             .send_request(interface::CREATE_GROUP, &mut data)
             .unwrap();

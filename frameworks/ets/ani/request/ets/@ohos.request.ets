@@ -703,6 +703,12 @@ export default namespace request {
       disable?: boolean;
       visibility?: int;
       wantAgent?: WantAgent;
+      /**
+       * Whether to hide the stop button on the notification bar.
+       * Default is false, which means the stop button is shown.
+       * @since 7.1
+       */
+      hideStopButton?: boolean;
     }
 
     export class NotificationInner implements Notification {
@@ -711,6 +717,7 @@ export default namespace request {
       disable?: boolean;
       visibility?: int;
       wantAgent?: WantAgent;
+      hideStopButton?: boolean;
     }
 
     export interface MinSpeed {

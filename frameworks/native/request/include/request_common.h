@@ -140,6 +140,7 @@ struct Notification {
     std::optional<std::string> wantAgent = std::nullopt;
     bool disable = false;
     uint32_t visibility = 0b01;
+    bool hideStopButton = false;
 };
 
 // Minimum speed configuration for download/upload tasks.

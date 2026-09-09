@@ -90,7 +90,7 @@ fn ut_notify_flow_task_progress() {
     let task_id = fast_random() as u32;
     let uid = fast_random();
 
-    let config = NotificationConfig::new(task_id, None, None, None, false, 0b10);
+    let config = NotificationConfig::new(task_id, None, None, None, false, 0b10, false);
     db.update_task_customized_notification(&config);
 
     let progress = ProgressNotify {
@@ -130,7 +130,7 @@ fn ut_notify_flow_task_eventual() {
     let task_id = fast_random() as u32;
     let uid = fast_random();
 
-    let config = NotificationConfig::new(task_id, None, None, None, false, 0b01);
+    let config = NotificationConfig::new(task_id, None, None, None, false, 0b01, false);
     db.update_task_customized_notification(&config);
 
     let info = EventualNotify {
@@ -192,6 +192,7 @@ fn ut_customized_task_eventual() {
         Some(TEST_WANT_AGENT.to_string()),
         false,
         0b01,
+        false,
     );
     db.update_task_customized_notification(&config);
 

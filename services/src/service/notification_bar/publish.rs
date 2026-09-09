@@ -503,6 +503,7 @@ impl NotificationDispatcher {
         want_agent: Option<String>,
         disable: bool,
         visibility: u32,
+        hide_stop_button: bool,
         uid: u64,
     ) -> u32 {
         // Generate a unique group ID using random number generation
@@ -532,12 +533,13 @@ impl NotificationDispatcher {
         );
 
         // Set up customized notification if provided
-        if title.is_some() || text.is_some() || want_agent.is_some() {
+        if title.is_some() || text.is_some() || want_agent.is_some() || hide_stop_button {
             self.database.update_group_customized_notification(
                 new_group_id,
                 title,
                 text,
                 want_agent,
+                hide_stop_button,
             );
         }
 
