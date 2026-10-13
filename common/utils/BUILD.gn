@@ -50,6 +50,7 @@ ohos_static_library("request_application_cxx") {
     "runtime_core:ani",
     "ipc:ipc_single",
     "c_utils:utils",
+    "icu:shared_icuuc",
   ]
   deps = [ ":request_application_cxx_gen" ]
 

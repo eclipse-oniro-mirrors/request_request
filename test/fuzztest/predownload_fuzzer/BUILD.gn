@@ -57,6 +57,7 @@ ohos_fuzztest("PredownloadFuzzTest") {
     "access_token:libtoken_setproc",
     "c_utils:utils",
     "hilog:libhilog",
+    "icu:shared_icuuc",
     "ipc:ipc_single",
     "netstack:http_client",
     "rust_cxx:cxx_cppdeps",

@@ -60,6 +60,7 @@ ohos_unittest("multi_instance_test") {
     "googletest:gmock_main",
     "hilog:libhilog",
     "hisysevent:libhisysevent",
+    "icu:shared_icuuc",
     "init:libbegetutil",
     "ipc:ipc_single",
     "netmanager_base:net_conn_manager_if",

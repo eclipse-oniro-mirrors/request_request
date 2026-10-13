@@ -40,6 +40,7 @@ ohos_unittest("inotify_image_test") {
     "googletest:gtest_main",
     "hilog:libhilog",
     "hisysevent:libhisysevent",
+    "icu:shared_icuuc",
     "rust_cxx:cxx_cppdeps",
   ]
 }
