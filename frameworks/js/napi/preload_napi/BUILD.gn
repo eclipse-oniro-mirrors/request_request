@@ -33,7 +33,7 @@ ohos_shared_library("preload_napi") {
   }
 
   public_configs = [ ":preload_napi_config" ]
-  version_script = "libcache_download.map"
+  version_script = "libpreload_napi.map"
 
   sources = [
     "src/napi_utils.cpp",

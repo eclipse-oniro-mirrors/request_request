@@ -29,6 +29,10 @@ ohos_shared_library("cachedownload") {
     "include"
   ]
 
+  cflags = [ "-fvisibility=hidden" ]
+
+  version_script = "libcache_download.map"
+
   sources = [
     "src/preload_module.cpp",
   ]

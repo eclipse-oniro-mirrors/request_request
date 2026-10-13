@@ -153,6 +153,8 @@ ohos_rust_shared_library("download_server") {
     debug = false
   }
 
+  version_script = "libdownload_server.map"
+
   sources = [ "src/lib.rs" ]
   rustflags = [
     "-Copt-level=z",

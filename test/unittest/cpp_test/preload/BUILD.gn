@@ -34,8 +34,9 @@ ohos_unittest("preload_test") {
     "src/clear_cache.cpp",
   ]
 
-  deps = [ 
+  deps = [
     "../../../../frameworks/native/cache_download:preload_native",
+    "../../../../common/utf8_utils:request_utf8_utils",
     "../../common/set_permission:common_permission",
   ]
   external_deps = [

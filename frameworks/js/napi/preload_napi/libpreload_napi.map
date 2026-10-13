@@ -1,0 +1,37 @@
+/* Copyright (c) 2026 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+{
+  global:
+    _ZN4OHOS7Request10ThrowErrorEP10napi_env__iRKNSt3__h12basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE;
+    _ZN4OHOS7Request11GetValueNumEP10napi_env__P12napi_value__;
+    _ZN4OHOS7Request12GetValueTypeEP10napi_env__P12napi_value__;
+    _ZN4OHOS7Request14GetValueStringEP10napi_env__P12napi_value__j;
+    _ZN4OHOS7Request14GetValueStringEP10napi_env__P12napi_value__m;
+    _ZN4OHOS7Request15Convert2JSValueEP10napi_env__RKNSt3__h12basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE;
+    _ZN4OHOS7Request15Convert2JSValueEP10napi_env__j;
+    _ZN4OHOS7Request15GetStringLengthEP10napi_env__P12napi_value__;
+    _ZN4OHOS7Request15SetOptionsRetryEP10napi_env__P12napi_value__RNSt3__h10unique_ptrINS0_14PreloadOptionsENS5_14default_deleteIS7_EEEE;
+    _ZN4OHOS7Request16GetCacheStrategyEP10napi_env__P12napi_value__Rb;
+    _ZN4OHOS7Request16GetNamedPropertyEP10napi_env__P12napi_value__RKNSt3__h12basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEE;
+    _ZN4OHOS7Request17BuildDownloadInfoEP10napi_env__RKNS0_15CppDownloadInfoE;
+    _ZN4OHOS7Request17SetOptionsHeadersEP10napi_env__P12napi_value__RNSt3__h10unique_ptrINS0_14PreloadOptionsENS5_14default_deleteIS7_EEEE;
+    _ZN4OHOS7Request17SetOptionsSslTypeEP10napi_env__P12napi_value__RNSt3__h10unique_ptrINS0_14PreloadOptionsENS5_14default_deleteIS7_EEEE;
+    _ZN4OHOS7Request17SetOptionsTimeoutEP10napi_env__P12napi_value__RNSt3__h10unique_ptrINS0_14PreloadOptionsENS5_14default_deleteIS7_EEEE;
+    _ZN4OHOS7Request17SetUint32PropertyEP10napi_env__P12napi_value__RKNSt3__h12basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEEj;
+    _ZN4OHOS7Request21SetStringPropertyUtf8EP10napi_env__P12napi_value__RKNSt3__h12basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEESD_;
+    _ZN4OHOS7Request25GetStringValueWithDefaultEP10napi_env__P12napi_value__;
+    __cfi_check;
+  local:
+    *;
+};

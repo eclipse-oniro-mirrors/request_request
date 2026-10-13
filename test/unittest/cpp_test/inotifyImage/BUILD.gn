@@ -29,6 +29,7 @@ ohos_unittest("inotify_image_test") {
 
   deps = [
     "../../../../frameworks/native/cache_download:preload_native",
+    "../../../../common/utf8_utils:request_utf8_utils",
     "../../common/dir_operation:common_dir_op",
   ]
   external_deps = [

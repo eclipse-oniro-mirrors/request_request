@@ -33,6 +33,7 @@ ohos_unittest("preload_napi_test") {
 
   deps = [
     "../../../../frameworks/native/cache_download:preload_native",
+    "../../../../common/utf8_utils:request_utf8_utils",
   ]
   external_deps = [
     "bundle_framework:appexecfwk_core_headers",

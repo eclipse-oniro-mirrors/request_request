@@ -91,6 +91,8 @@ ohos_rust_shared_library("cache_download_ani") {
     debug = false
   }
 
+  version_script = "libcache_download_ani.map"
+
   sources = [ "src/lib.rs" ]
   rustflags = [
     "-Copt-level=z",
