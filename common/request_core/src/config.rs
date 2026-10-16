@@ -329,6 +329,7 @@ impl TaskConfigBuilder {
                 disable: None,
                 visibility: None,
                 want_agent: None,
+                hide_stop_button: None,
             },
             min_speed: self.min_speed.unwrap_or(MinSpeed {
                 speed: 0,
@@ -476,6 +477,14 @@ impl ipc::parcel::Serialize for TaskConfig {
             } else {
                 parcel.write(&1u32)?;
             }
+        }
+
+        // Serialize hide_stop_button field
+        if let Some(hide_stop_button) = self.notification.hide_stop_button {
+            parcel.write(&true)?;
+            parcel.write(&hide_stop_button)?;
+        } else {
+            parcel.write(&false)?;
         }
         Ok(())
     }
@@ -802,6 +811,7 @@ impl ipc::parcel::Deserialize for TaskConfig {
                 disable: None,
                 visibility: None,
                 want_agent: None,
+                hide_stop_button: None,
             },
             min_speed: MinSpeed {
                 speed: min_speed_speed,
@@ -828,6 +838,9 @@ pub struct Notification {
     pub visibility: Option<i32>,
     /// Serialized want agent invoked when the notification is tapped.
     pub want_agent: Option<String>,
+    /// Whether to hide the stop button on the notification bar.
+    /// Defaults to false (stop button shown).
+    pub hide_stop_button: Option<bool>,
 }
 
 /// Configuration for a grouped set of tasks.

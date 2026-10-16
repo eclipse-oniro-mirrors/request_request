@@ -56,8 +56,14 @@ const TASK_CONTENT_TABLE_ADD_VISIBILITY: &str =
 const TASK_CONTENT_TABLE_ADD_WANT_AGENT: &str = 
     "ALTER TABLE task_notification_content ADD COLUMN want_agent TEXT";
 
-const GROUP_CONTENT_TABLE_ADD_WANT_AGENT: &str = 
+const GROUP_CONTENT_TABLE_ADD_WANT_AGENT: &str =
     "ALTER TABLE group_notification_content ADD COLUMN want_agent TEXT";
+
+const TASK_CONTENT_TABLE_ADD_HIDE_STOP_BUTTON: &str =
+    "ALTER TABLE task_notification_content ADD COLUMN hide_stop_button BOOLEAN DEFAULT FALSE";
+
+const GROUP_CONTENT_TABLE_ADD_HIDE_STOP_BUTTON: &str =
+    "ALTER TABLE group_notification_content ADD COLUMN hide_stop_button BOOLEAN DEFAULT FALSE";
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -81,6 +87,7 @@ pub(crate) struct CustomizedNotification {
     pub title: Option<String>,
     pub text: Option<String>,
     pub want_agent: Option<String>,
+    pub hide_stop_button: bool,
 }
 
 impl NotificationDb {
@@ -193,6 +200,30 @@ impl NotificationDb {
             );
         } else {
             debug!("Successfully added uid column to group_notification_config table");
+        }
+
+        // Add hide_stop_button column to task_notification_content table
+        if let Err(e) = self.inner.execute(TASK_CONTENT_TABLE_ADD_HIDE_STOP_BUTTON, ()) {
+            error!("Failed to add hide_stop_button column to task_notification_content table: {}", e);
+            sys_event!(
+                ExecFault,
+                DfxCode::RDB_FAULT_04,
+                &format!("Failed to add hide_stop_button column to task_notification_content table: {}", e)
+            );
+        } else {
+            debug!("Successfully added hide_stop_button column to task_notification_content table");
+        }
+
+        // Add hide_stop_button column to group_notification_content table
+        if let Err(e) = self.inner.execute(GROUP_CONTENT_TABLE_ADD_HIDE_STOP_BUTTON, ()) {
+            error!("Failed to add hide_stop_button column to group_notification_content table: {}", e);
+            sys_event!(
+                ExecFault,
+                DfxCode::RDB_FAULT_04,
+                &format!("Failed to add hide_stop_button column to group_notification_content table: {}", e)
+            );
+        } else {
+            debug!("Successfully added hide_stop_button column to group_notification_content table");
         }
     }
 
@@ -459,8 +490,8 @@ impl NotificationDb {
         &self,
         task_id: u32,
     ) -> Option<CustomizedNotification> {
-        let mut set = match self.inner.query::<(Option<String>, Option<String>, Option<String>)>(
-            "SELECT title, text, want_agent FROM task_notification_content WHERE task_id = ?",
+        let mut set = match self.inner.query::<(Option<String>, Option<String>, Option<String>, bool)>(
+            "SELECT title, text, want_agent, hide_stop_button FROM task_notification_content WHERE task_id = ?",
             task_id,
         ) {
             Ok(set) => set,
@@ -474,8 +505,9 @@ impl NotificationDb {
                 return None;
             }
         };
-        set.next()
-            .map(|(title, text, want_agent)| CustomizedNotification { title, text, want_agent })
+        set.next().map(|(title, text, want_agent, hide_stop_button)| {
+            CustomizedNotification { title, text, want_agent, hide_stop_button }
+        })
     }
 
     /// Updates or inserts customized notification content for a task.
@@ -485,8 +517,8 @@ impl NotificationDb {
     /// * `config` - Notification configuration containing task ID and content to update
     pub(crate) fn update_task_customized_notification(&self, config: &NotificationConfig) {
         if let Err(e) = self.inner.execute(
-            "INSERT INTO task_notification_content (task_id, title, text, want_agent, visibility) VALUES (?, ?, ?, ?, ?) ON CONFLICT(task_id) DO UPDATE SET title = excluded.title, text = excluded.text, want_agent = excluded.want_agent, visibility = excluded.visibility",
-            (config.task_id, config.title.clone(), config.text.clone(), config.want_agent.clone(), config.visibility),
+            "INSERT INTO task_notification_content (task_id, title, text, want_agent, visibility, hide_stop_button) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(task_id) DO UPDATE SET title = excluded.title, text = excluded.text, want_agent = excluded.want_agent, visibility = excluded.visibility, hide_stop_button = excluded.hide_stop_button",
+            (config.task_id, config.title.clone(), config.text.clone(), config.want_agent.clone(), config.visibility, config.hide_stop_button),
         ) {
             error!("Failed to insert {} notification: {}", config.task_id, e);
             sys_event!(ExecFault, DfxCode::RDB_FAULT_04, &format!("Failed to insert {} notification: {}", config.task_id, e));
@@ -507,8 +539,8 @@ impl NotificationDb {
         &self,
         group_id: u32,
     ) -> Option<CustomizedNotification> {
-        let mut set = match self.inner.query::<(Option<String>, Option<String>, Option<String>)>(
-            "SELECT title, text, want_agent FROM group_notification_content WHERE group_id = ?",
+        let mut set = match self.inner.query::<(Option<String>, Option<String>, Option<String>, bool)>(
+            "SELECT title, text, want_agent, hide_stop_button FROM group_notification_content WHERE group_id = ?",
             group_id,
         ) {
             Ok(set) => set,
@@ -522,8 +554,9 @@ impl NotificationDb {
                 return None;
             }
         };
-        set.next()
-            .map(|(title, text, want_agent)| CustomizedNotification { title, text, want_agent })
+        set.next().map(|(title, text, want_agent, hide_stop_button)| {
+            CustomizedNotification { title, text, want_agent, hide_stop_button }
+        })
     }
 
     /// Updates or inserts customized notification content for a group.
@@ -540,10 +573,11 @@ impl NotificationDb {
         title: Option<String>,
         text: Option<String>,
         want_agent: Option<String>,
+        hide_stop_button: bool,
     ) {
         if let Err(e) = self.inner.execute(
-            "INSERT INTO group_notification_content (group_id, title, text, want_agent) VALUES (?, ?, ?, ?) ON CONFLICT(group_id) DO UPDATE SET title = excluded.title, text = excluded.text, want_agent = excluded.want_agent",
-            (group_id, title, text, want_agent),
+            "INSERT INTO group_notification_content (group_id, title, text, want_agent, hide_stop_button) VALUES (?, ?, ?, ?, ?) ON CONFLICT(group_id) DO UPDATE SET title = excluded.title, text = excluded.text, want_agent = excluded.want_agent, hide_stop_button = excluded.hide_stop_button",
+            (group_id, title, text, want_agent, hide_stop_button),
         ) {
             error!("Failed to insert {} notification: {}", group_id, e);
             sys_event!(ExecFault, DfxCode::RDB_FAULT_04, &format!("Failed to insert {} notification: {}", group_id, e));

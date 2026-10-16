@@ -161,6 +161,25 @@ void JsInitialize::ParseRoaming(napi_env env, napi_value jsConfig, Config &confi
     }
 }
 
+bool JsInitialize::ParseNotificationWantAgent(napi_env env, napi_value notification, Config &config)
+{
+    OHOS::AbilityRuntime::WantAgent::WantAgent *wantAgent = nullptr;
+    napi_value wantValue = nullptr;
+    if (NapiUtils::GetValueType(env, NapiUtils::GetNamedProperty(env, notification, "wantAgent"))
+        != napi_undefined) {
+        napi_get_named_property(env, notification, "wantAgent", &wantValue);
+        napi_status status = napi_unwrap(env, wantValue, (void **)&wantAgent);
+        if (status == napi_ok && wantAgent != nullptr) {
+            std::shared_ptr<OHOS::AbilityRuntime::WantAgent::WantAgent> sWantAgent =
+                std::make_shared<OHOS::AbilityRuntime::WantAgent::WantAgent>(*wantAgent);
+            config.notification.wantAgent = OHOS::AbilityRuntime::WantAgent::WantAgentHelper::ToString(sWantAgent);
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool JsInitialize::ParseNotification(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     napi_value notification = NapiUtils::GetNamedProperty(env, jsConfig, "notification");
@@ -179,19 +198,8 @@ bool JsInitialize::ParseNotification(napi_env env, napi_value jsConfig, Config &
                 return false;
             }
         }
-        OHOS::AbilityRuntime::WantAgent::WantAgent *wantAgent = nullptr;
-        napi_value wantValue = nullptr;
-        if (NapiUtils::GetValueType(env, NapiUtils::GetNamedProperty(env, notification, "wantAgent"))
-            != napi_undefined) {
-            napi_get_named_property(env, notification, "wantAgent", &wantValue);
-            napi_status status = napi_unwrap(env, wantValue, (void **)&wantAgent);
-            if (status == napi_ok && wantAgent != nullptr) {
-                std::shared_ptr<OHOS::AbilityRuntime::WantAgent::WantAgent> sWantAgent =
-                    std::make_shared<OHOS::AbilityRuntime::WantAgent::WantAgent>(*wantAgent);
-                config.notification.wantAgent = OHOS::AbilityRuntime::WantAgent::WantAgentHelper::ToString(sWantAgent);
-            } else {
-                return false;
-            }
+        if (!ParseNotificationWantAgent(env, notification, config)) {
+            return false;
         }
         if (NapiUtils::GetValueType(env, NapiUtils::GetNamedProperty(env, notification, "disable"))
             != napi_undefined) {
@@ -206,6 +214,11 @@ bool JsInitialize::ParseNotification(napi_env env, napi_value jsConfig, Config &
                 errInfo = "Parameter verification failed, invalid visibility value";
                 return false;
             }
+        }
+        if (NapiUtils::GetValueType(env, NapiUtils::GetNamedProperty(env, notification, "hideStopButton"))
+            != napi_undefined) {
+            config.notification.hideStopButton =
+                NapiUtils::Convert2Boolean(env, notification, "hideStopButton");
         }
     }
     return true;

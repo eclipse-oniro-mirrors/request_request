@@ -292,7 +292,17 @@ std::shared_ptr<OHOS::Notification::NotificationContent> LiveViewContent(const N
     liveViewContent->SetText(std::string(content.text));
     liveViewContent->SetTitle(std::string(content.title));
 
-    if (content.x_mark || content.progress_circle.open) {
+    // The BUTTON flag enables the button area. The stop/start controls are
+    // system-rendered defaults for in-progress live-view notifications; there
+    // is currently no framework API to suppress them individually. When
+    // hide_stop_button is set, omit the button area unless a cancel button is
+    // explicitly required (x_mark), so the stop control is not offered while
+    // progress still displays via the separate PROGRESS flag.
+    bool needButtonArea = content.x_mark || content.progress_circle.open;
+    // The button area renders the stop control (the cancel button here is the
+    // stop button itself). When hide_stop_button is set, omit the whole button
+    // area regardless of x_mark so the stop button is not offered.
+    if (needButtonArea && !content.hide_stop_button) {
         liveViewContent->addFlag(Notification::NotificationLocalLiveViewContent::LiveViewContentInner::BUTTON);
     }
 

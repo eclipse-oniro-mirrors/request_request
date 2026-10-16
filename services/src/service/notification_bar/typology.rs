@@ -117,6 +117,7 @@ impl NotifyContent {
         
         // Use custom text if provided, otherwise use file name
         let text = customized.as_mut().and_then(|c| c.text.take()).unwrap_or(file_name);
+        let hide_stop_button = customized.as_ref().map(|c| c.hide_stop_button).unwrap_or(false);
         let want_agent = customized.and_then(|c| c.want_agent).unwrap_or_default();
 
         Self {
@@ -128,6 +129,7 @@ impl NotifyContent {
             live_view: false,       // Not a live updating notification
             progress_circle: ProgressCircle::close(),
             x_mark: false,          // No close button needed for completed task
+            hide_stop_button,
         }
     }
 
@@ -183,8 +185,9 @@ impl NotifyContent {
             .and_then(|c| c.text.clone())
             .unwrap_or_else(|| info.file_name.clone());
         
+        let hide_stop_button = customized.as_ref().map(|c| c.hide_stop_button).unwrap_or(false);
         let want_agent = customized.and_then(|c| c.want_agent).unwrap_or_default();
-        
+
         // Create progress circle if total size is known
         let progress_circle = match info.total {
             Some(total) => ProgressCircle::open(info.processed, total),
@@ -200,6 +203,7 @@ impl NotifyContent {
             live_view: true,
             progress_circle,
             x_mark: true,
+            hide_stop_button,
         }
     }
 
@@ -258,6 +262,7 @@ impl NotifyContent {
         };
 
         let text = customized.as_mut().and_then(|c| c.text.take()).unwrap_or(text_count);
+        let hide_stop_button = customized.as_ref().map(|c| c.hide_stop_button).unwrap_or(false);
         let want_agent = customized.and_then(|c| c.want_agent).unwrap_or_default();
 
         Self {
@@ -269,6 +274,7 @@ impl NotifyContent {
             live_view: false,
             progress_circle: ProgressCircle::close(),
             x_mark: false,
+            hide_stop_button,
         }
     }
 
@@ -327,6 +333,7 @@ impl NotifyContent {
         };
 
         let text = customized.as_mut().and_then(|c| c.text.take()).unwrap_or(text_count);
+        let hide_stop_button = customized.as_ref().map(|c| c.hide_stop_button).unwrap_or(false);
         let want_agent = customized.and_then(|c| c.want_agent).unwrap_or_default();
 
         let progress_circle =
@@ -340,6 +347,7 @@ impl NotifyContent {
             live_view: true,
             progress_circle,
             x_mark: false,
+            hide_stop_button,
         }
     }
 }

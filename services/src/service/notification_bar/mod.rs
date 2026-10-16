@@ -62,6 +62,7 @@ mod ffi {
         live_view: bool,
         progress_circle: ProgressCircle,
         x_mark: bool,
+        hide_stop_button: bool,
     }
 
     /// Progress circle information for notifications.

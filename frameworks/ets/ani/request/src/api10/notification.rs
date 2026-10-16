@@ -119,6 +119,7 @@ pub fn create_group(env: &AniEnv, mut config: GroupConfig) -> Result<String, Bus
         disable: config.notification.disable,
         visibility: config.notification.visibility,
         want_agent,
+        hide_stop_button: config.notification.hide_stop_button,
     };
     RequestClient::get_instance()
         .create_group(config.gauge, notification)

@@ -40,6 +40,7 @@ fn ut_notification_verifier_api9_with_notification() {
         disable: None,
         visibility: Some(0),
         want_agent: None,
+        hide_stop_button: None,
     };
     let config = create_config_with_notification(Version::API9, notification);
     assert!(verifier.verify(&config).is_ok());
@@ -63,6 +64,7 @@ fn ut_notification_verifier_api10_empty_notification() {
         disable: None,
         visibility: None,
         want_agent: None,
+        hide_stop_button: None,
     };
     let config = create_config_with_notification(Version::API10, notification);
     assert!(verifier.verify(&config).is_ok());
@@ -86,6 +88,7 @@ fn ut_notification_verifier_api10_valid_title() {
         disable: None,
         visibility: None,
         want_agent: None,
+        hide_stop_button: None,
     };
     let config = create_config_with_notification(Version::API10, notification);
     assert!(verifier.verify(&config).is_ok());
@@ -109,6 +112,7 @@ fn ut_notification_verifier_api10_title_exceed_max() {
         disable: None,
         visibility: None,
         want_agent: None,
+        hide_stop_button: None,
     };
     let config = create_config_with_notification(Version::API10, notification);
     let result = verifier.verify(&config);
@@ -134,6 +138,7 @@ fn ut_notification_verifier_api10_text_exceed_max() {
         disable: None,
         visibility: None,
         want_agent: None,
+        hide_stop_button: None,
     };
     let config = create_config_with_notification(Version::API10, notification);
     let result = verifier.verify(&config);
@@ -159,6 +164,7 @@ fn ut_notification_verifier_api10_empty_want_agent() {
         disable: None,
         visibility: None,
         want_agent: Some("".to_string()),
+        hide_stop_button: None,
     };
     let config = create_config_with_notification(Version::API10, notification);
     let result = verifier.verify(&config);
@@ -184,6 +190,7 @@ fn ut_notification_verifier_api10_visibility_zero() {
         disable: None,
         visibility: Some(0),
         want_agent: None,
+        hide_stop_button: None,
     };
     let config = create_config_with_notification(Version::API10, notification);
     let result = verifier.verify(&config);
@@ -210,6 +217,7 @@ fn ut_notification_verifier_api10_visibility_valid() {
             disable: None,
             visibility: Some(vis),
             want_agent: None,
+            hide_stop_button: None,
         };
         let config = create_config_with_notification(Version::API10, notification);
         assert!(verifier.verify(&config).is_ok());
@@ -235,6 +243,7 @@ fn ut_notification_verifier_api10_visibility_invalid() {
             disable: None,
             visibility: Some(vis),
             want_agent: None,
+            hide_stop_button: None,
         };
         let config = create_config_with_notification(Version::API10, notification);
         let result = verifier.verify(&config);

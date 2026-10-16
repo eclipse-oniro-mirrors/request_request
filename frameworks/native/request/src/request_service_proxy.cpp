@@ -461,6 +461,9 @@ void SerializeNotification(MessageParcel &data, const Notification &notification
     }
     data.WriteBool(notification.disable);
     data.WriteUint32(static_cast<uint32_t>(notification.visibility));
+    // hideStopButton: flag + value (matches the service-side deserialization).
+    data.WriteBool(true);
+    data.WriteBool(notification.hideStopButton);
 }
 
 int32_t RequestServiceProxy::Create(const Config &config, std::string &tid)
@@ -947,6 +950,9 @@ int32_t RequestServiceProxy::CreateGroup(std::string &gid, const bool gauge, Not
     }
     data.WriteBool(notification.disable);
     data.WriteUint32(static_cast<uint32_t>(notification.visibility));
+    // hideStopButton: flag + value (matches the service-side deserialization).
+    data.WriteBool(true);
+    data.WriteBool(notification.hideStopButton);
     int32_t ret =
         Remote()->SendRequest(static_cast<uint32_t>(RequestInterfaceCode::CMD_CREATE_GROUP), data, reply, option);
     if (ret != ERR_NONE) {
