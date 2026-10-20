@@ -84,7 +84,7 @@ pub struct CacheDownloadService {
     /// Registrar for network state observation and notifications.
     net_registrar: NetRegistrar,
     restore_finished: Arc<AtomicBool>,
-    /// Global retry configuration: maximum retry count (default: 3)
+    /// Global retry configuration: maximum retry count (default: 1)
     global_max_retry: Mutex<usize>,
     /// Global timeout configuration: network check timeout in seconds (default: 20)
     global_network_check_timeout: Mutex<u32>,
@@ -527,7 +527,7 @@ impl CacheDownloadService {
     /// Sets global retry options for all tasks.
     ///
     /// # Arguments
-    /// * `max_retry` - Maximum retry count (default: 3, min: 0, max: 10)
+    /// * `max_retry` - Maximum retry count (default: 1, min: 0, max: 10)
     pub fn set_global_retry_options(&self, max_retry: usize) {
         let max_retry = if max_retry > 10 { 10 } else { max_retry };
         *self.global_max_retry.lock().unwrap() = max_retry;
@@ -608,6 +608,14 @@ impl CacheDownloadService {
         }
     }
 
+    /// Tries to satisfy a preload callback from data that is already local.
+    ///
+    /// While the startup cache-index restore is still running, the cache is
+    /// tried first (`fetch_with_callback`) and then the task's file on disk
+    /// (`read_local_file_with_callback`); once the restore has finished only
+    /// the cache is consulted. On success the callback is fired on a spawned
+    /// thread and a completed handle is returned; on failure the callback is
+    /// handed back so the caller can start a network download with it.
     fn callback_from_local_file(
         &'static self,
         task_id: &TaskId,
@@ -646,6 +654,12 @@ impl CacheDownloadService {
         CallbackResult::Failed(callback)
     }
 
+    /// Reads the task's file from disk and fires the callback with the loaded
+    /// data on a spawned thread.
+    ///
+    /// # Returns
+    /// `Ok(())` if the file was read and the callback notified;
+    /// `Err(callback)` otherwise, handing the callback back to the caller.
     fn read_local_file_with_callback(
         &'static self,
         task_id: TaskId,
@@ -661,14 +675,19 @@ impl CacheDownloadService {
     }
 }
 
+/// Builds a `CallbackResult` carrying a handle already marked completed.
 fn complete_callback(task_id: &TaskId) -> CallbackResult {
     let handle = TaskHandle::new(task_id.clone());
     handle.set_completed();
     CallbackResult::Completed(handle)
 }
 
+/// Outcome of trying to satisfy a preload callback from local data.
 enum CallbackResult {
+    /// The callback was fired; carries the completed task handle.
     Completed(TaskHandle),
+    /// No local data matched; hands the callback back to the caller so it can
+    /// be reused for a network download.
     Failed(Box<dyn PreloadCallback>),
 }
 

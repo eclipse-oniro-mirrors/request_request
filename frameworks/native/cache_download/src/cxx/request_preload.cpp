@@ -414,7 +414,7 @@ std::shared_ptr<PreloadHandle> Preload::load(std::string const &url, std::unique
 }
 
 /**
- * @brief Fetch data from cache or network
+ * @brief Fetch data from the local cache
  * @param url URL to fetch
  * @return Optional containing Data if successful
  */

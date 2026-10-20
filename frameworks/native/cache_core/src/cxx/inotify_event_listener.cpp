@@ -94,7 +94,7 @@ void DirectoryMonitor::Stop()
 
 /**
  * @brief Sets up inotify for directory monitoring
- * @return int File descriptor on success, -1 on failure
+ * @return int Watch descriptor on success, -1 on failure
  */
 int DirectoryMonitor::SetupInotify()
 {
@@ -118,7 +118,7 @@ int DirectoryMonitor::SetupInotify()
 
 /**
  * @brief Sets up epoll for monitoring inotify events
- * @return int File descriptor on success, -1 on failure
+ * @return int 0 on success (the result of registering the inotify fd), -1 on failure
  */
 int DirectoryMonitor::SetupEpoll()
 {

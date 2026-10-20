@@ -413,12 +413,10 @@ impl FileCache {
         &self.task_id
     }
 
-    /// Releases the file cache resource.
+    /// Removes the cache file for the given task from disk.
     ///
-    /// Removes the cache file from disk and releases the associated memory.
-    ///
-    /// # Returns
-    /// Amount of memory released (in bytes)
+    /// A "no such file or directory" error is logged at debug level (expected
+    /// when the file is already gone); other errors are logged at error level.
     pub(crate) fn remove_file(task_id: &TaskId) {
         if let Some(path) = Self::path(task_id) {
             if let Err(e) = fs::remove_file(path) {
@@ -435,8 +433,11 @@ impl FileCache {
 
     /// Creates a cache file and writes the contents of the RAM cache to it.
     ///
-    /// Writes data to a temporary file and then renames it with the finish
-    /// suffix to indicate it's complete.
+    /// Opens the final cache file path (which already carries the finish
+    /// suffix) and writes directly into it, truncating any previous content.
+    /// The write is not atomic: a crash or power loss mid-write leaves a
+    /// finish-suffixed file that index rebuilding may mistake for a complete
+    /// cache entry.
     ///
     /// # Arguments
     /// * `task_id` - ID of the task to create the file for

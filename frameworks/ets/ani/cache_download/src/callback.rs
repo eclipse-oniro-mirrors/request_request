@@ -113,10 +113,14 @@ impl CallbackWrapper {
 }
 
 impl PreloadCallback for CallbackWrapper {
+    // Notifies all success callbacks registered for this URL; the downloaded
+    // data itself is not forwarded to JS.
     fn on_success(&mut self, _: Arc<RamCache>, _: &str) {
         CallbackManager::get_instance().call_success_callbacks(self.url.as_str());
     }
 
+    // Converts the native error to a DownloadError and notifies all error
+    // callbacks registered for this URL.
     fn on_fail(&mut self, error: CacheDownloadError, _: RustDownloadInfo, _: &str) {
         let error = DownloadError::from_native(error);
         CallbackManager::get_instance().call_error_callbacks(self.url.as_str(), error);

@@ -26,13 +26,6 @@ use request_utils::task_id::TaskId;
 use crate::data::RamCache;
 use crate::manage::CacheManager;
 
-// Previous version of Updater struct (commented out)
-// pub(crate) struct Updater {
-//     pub(crate) remove_flag: bool
-//     pub(crate) seq: usize,
-//     pub(crate) handle: TaskHandle,
-// }
-
 /// Manages cache updates for a specific task.
 ///
 /// This struct handles the process of receiving data, storing it in a RAM
@@ -41,21 +34,14 @@ use crate::manage::CacheManager;
 ///
 /// # Examples
 ///
-/// ```rust
-/// use cache_core::{CacheManager, Updater};
-/// use request_utils::task_id::TaskId;
+/// Create an updater from the process-wide static `CacheManager` and a task
+/// ID, feed it response chunks, then finish (illustrative; `Updater::new`
+/// requires a `'static` cache manager):
 ///
-/// // Create a cache manager and updater
-/// let manager = CacheManager::new();
-/// let task_id = TaskId::new("example_task".to_string());
-/// let mut updater = Updater::new(task_id, &manager);
-///
-/// // Receive data in chunks
-/// updater.cache_receive(b"Hello, ", || Some(13));
-/// updater.cache_receive(b"world!", || None);
-///
-/// // Finalize the cache
-/// let final_cache = updater.cache_finish();
+/// ```text
+/// let mut updater = Updater::new(task_id, cache_manager);
+/// updater.cache_receive(chunk, || content_length);
+/// let cache = updater.cache_finish();
 /// ```
 pub struct Updater {
     /// Unique identifier for the task being updated

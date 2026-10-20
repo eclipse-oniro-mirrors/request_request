@@ -16,10 +16,19 @@
 //! Aggregates the callback, network backend (netstack or ylong), common
 //! utilities, error, and task submodules that together drive a cache download.
 
+// Task state codes. The numeric values mirror the C++ `PreloadState` enum in
+// `request_preload.h` one-to-one and cross the FFI boundary as plain
+// integers; treat them as a cross-language contract: append only, never
+// renumber or reorder.
+/// Task created, not yet started.
 pub(crate) const INIT: usize = 0;
+/// Task is currently downloading.
 pub(crate) const RUNNING: usize = 1;
+/// Task finished successfully.
 pub(crate) const SUCCESS: usize = 2;
+/// Task failed (after exhausting retries).
 pub(crate) const FAIL: usize = 3;
+/// Task canceled by the caller.
 pub(crate) const CANCEL: usize = 4;
 
 mod callback;

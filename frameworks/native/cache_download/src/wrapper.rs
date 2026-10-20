@@ -267,6 +267,10 @@ impl CacheDownloadService {
         }
     }
 
+    /// Fetches the cached data for the given URL for the C++ side.
+    ///
+    /// Returns a null pointer when the URL has no cache entry (neither in RAM
+    /// nor in the file cache); the C++ side maps that to `std::nullopt`.
     fn ffi_fetch(&'static self, url: &str) -> UniquePtr<ffi::Data> {
         match self.fetch(url).map(RustData::new) {
             Some(data) => ffi::UniqueData(Box::new(data)),
@@ -274,6 +278,10 @@ impl CacheDownloadService {
         }
     }
 
+    /// Returns the download statistics for the given URL for the C++ side.
+    ///
+    /// Returns a null pointer when no statistics have been collected for the
+    /// URL; the C++ side maps that to `std::nullopt`.
     fn ffi_get_download_info(&'static self, url: &str) -> UniquePtr<ffi::CppDownloadInfo> {
         match self.get_download_info(url) {
             Some(info) => ffi::UniqueInfo(Box::new(RustDownloadInfo::from_download_info(info))),
@@ -294,10 +302,15 @@ fn cache_download_service() -> *const CacheDownloadService {
     CacheDownloadService::get_instance() as *const CacheDownloadService
 }
 
-/// Sets the file cache path and registers it for observation.
+/// Registers the given directory for inotify observation.
+///
+/// Called by the C++ side when the file cache path is configured. The path
+/// does not become the cache write location; it is watched for file deletions
+/// (e.g. the gallery removing an image) so the associated cache entries can be
+/// cleaned up in response.
 ///
 /// # Arguments
-/// * `path` - The file path to set for the cache
+/// * `path` - Directory to observe for deletions
 fn set_file_cache_path(path: String) {
     observe_image_file_delete(path);
 }

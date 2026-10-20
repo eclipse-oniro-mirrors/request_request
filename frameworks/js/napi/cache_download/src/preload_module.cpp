@@ -41,20 +41,28 @@
 namespace OHOS::Request {
 using namespace Security::AccessToken;
 
+// Upper bound (in bytes) for the URL argument accepted by every URL-taking
+// export below. (The name is a historical typo of MAX_URL_LENGTH.)
 constexpr const size_t MAX_UTL_LENGTH = 8192;
 
+// Upper bounds for the size arguments of setMemoryCacheSize,
+// setFileCacheSize and setDownloadInfoListSize.
 constexpr int64_t MAX_MEM_SIZE = 1073741824;
 constexpr int64_t MAX_FILE_SIZE = 4294967296;
 constexpr int64_t MAX_INFO_LIST_SIZE = 8192;
+// Permissions verified before download (INTERNET) and getDownloadInfo
+// (GET_NETWORK_INFO) run; the other exports perform no permission check.
 const std::string INTERNET_PERMISSION = "ohos.permission.INTERNET";
 const std::string GET_NETWORK_INFO_PERMISSION = "ohos.permission.GET_NETWORK_INFO";
 
-// Retry constants
+// Retry count boundaries for maxRetryCount (download /
+// setGlobalRetryOptions); DEFAULT matches the Rust-side global default of 1.
 constexpr int64_t DEFAULT_MAX_RETRY_COUNT = 1;
 constexpr int64_t MIN_RETRY_COUNT = 0;
 constexpr int64_t MAX_RETRY_COUNT = 10;
 
-// Timeout constants
+// Timeout boundaries in seconds for networkCheckTimeout and httpTotalTimeout;
+// inputs are validated against these before reaching the Preload singleton.
 constexpr int64_t DEFAULT_NETWORK_CHECK_TIMEOUT = 20;
 constexpr int64_t MIN_NETWORK_CHECK_TIMEOUT = 0;
 constexpr int64_t MAX_NETWORK_CHECK_TIMEOUT = 20;
@@ -62,11 +70,16 @@ constexpr int64_t DEFAULT_HTTP_TOTAL_TIMEOUT = 60;
 constexpr int64_t MIN_HTTP_TOTAL_TIMEOUT = 1;
 constexpr int64_t MAX_HTTP_TOTAL_TIMEOUT = static_cast<int64_t>(std::numeric_limits<uint32_t>::max() / 1000);
 
+// Inclusive [minVal, maxVal] range accepted by ParseNumberField.
 struct Range {
     int64_t minVal;
     int64_t maxVal;
 };
 
+// Reads the optional numeric property fieldName of obj into outValue.
+// Returns true when the field is missing (outValue keeps its value) or is a
+// number within range; returns false on a type mismatch or an out-of-range
+// value, leaving outValue untouched.
 bool ParseNumberField(napi_env env, napi_value obj, const char *fieldName, Range range, int32_t &outValue)
 {
     napi_value field = GetNamedProperty(env, obj, fieldName);
@@ -84,6 +97,10 @@ bool ParseNumberField(napi_env env, napi_value obj, const char *fieldName, Range
     return true;
 }
 
+// Registers cb for this URL. A function already in the list (strict
+// equality) is reactivated instead of duplicated, undoing a deferred removal.
+// New entries hold a strong reference (refcount 1) that keeps the JS function
+// alive until it is removed.
 napi_status CallbackInfo::RegisterCallback(napi_value cb)
 {
     std::lock_guard<std::recursive_mutex> lock(allCbMutex_);
@@ -119,6 +136,10 @@ napi_status CallbackInfo::RegisterCallback(napi_value cb)
     return napi_ok;
 }
 
+// Removes callbacks for this URL: with cb == nullptr all of them, otherwise
+// only the strictly-equal one. While an invocation is in flight, entries are
+// merely marked inactive and their physical removal is deferred to
+// CleanupCallbacks(), because the invocation loop is still walking the list.
 napi_status CallbackInfo::RemoveCallback(napi_value cb)
 {
     std::lock_guard<std::recursive_mutex> lock(allCbMutex_);
@@ -164,6 +185,8 @@ napi_status CallbackInfo::RemoveCallback(napi_value cb)
     return napi_ok;
 }
 
+// Physically erases every inactive entry and deletes its napi_ref. Runs after
+// an invocation completes; does nothing when no removal is pending.
 void CallbackInfo::CleanupCallbacks()
 {
     if (toDeleteCount_ == 0) {
@@ -182,6 +205,10 @@ void CallbackInfo::CleanupCallbacks()
     toDeleteCount_ = (toDeleteCount_ > deletedCount) ? (toDeleteCount_ - deletedCount) : 0;
 }
 
+// Invokes every active success callback with a single argument (values[0])
+// inside a fresh handle scope. Inactive entries are deleted first; callbacks
+// removed from inside a callback are cleaned up afterwards. Must be called on
+// the JS thread of env_.
 void CallbackInfo::InvokeSuccessCallbacks(napi_value values[])
 {
     std::lock_guard<std::recursive_mutex> lock(allCbMutex_);
@@ -213,6 +240,10 @@ void CallbackInfo::InvokeSuccessCallbacks(napi_value values[])
     napi_close_handle_scope(env_, scope);
 }
 
+// Invokes every active error callback with a single argument (values[0], the
+// { errorCode, message } object) inside a fresh handle scope. Inactive entries
+// are deleted first; callbacks removed from inside a callback are cleaned up
+// afterwards. Must be called on the JS thread of env_.
 void CallbackInfo::InvokeErrorCallbacks(napi_value values[])
 {
     std::lock_guard<std::recursive_mutex> lock(allCbMutex_);
@@ -244,12 +275,15 @@ void CallbackInfo::InvokeErrorCallbacks(napi_value values[])
     napi_close_handle_scope(env_, scope);
 }
 
+// Returns the process-wide CallbackManager singleton.
 CallbackManager &CallbackManager::GetInstance()
 {
     static CallbackManager instance;
     return instance;
 }
 
+// Registers cb as a success/error callback for url, creating the per-URL
+// CallbackInfo on first use. A null cb is logged and ignored.
 napi_status CallbackManager::RegisterCallback(const std::string &url, CallbackType type, napi_env env, napi_value cb)
 {
     REQUEST_HILOGD("RegisterCallback start. Type: %s", (type == CallbackType::SUCCESS) ? "success" : "error");
@@ -273,6 +307,8 @@ napi_status CallbackManager::RegisterCallback(const std::string &url, CallbackTy
     return info->RegisterCallback(cb);
 }
 
+// Removes one callback (all of them when cb is null) for url. A per-URL entry
+// is created when none exists so the removal is a no-op rather than an error.
 napi_status CallbackManager::RemoveCallback(const std::string &url, CallbackType type, napi_env env, napi_value cb)
 {
     mgrMutex_.lock();
@@ -289,6 +325,10 @@ napi_status CallbackManager::RemoveCallback(const std::string &url, CallbackType
     return info->RemoveCallback(cb);
 }
 
+// Schedules the success callbacks of url on the JS thread of env via
+// napi_send_event (high priority), since native completion arrives on a
+// download thread. The data and taskId arguments are currently not passed on
+// to JS.
 void CallbackManager::InvokeSuccessCallbacks(
     const std::string &url, std::shared_ptr<Data> data, napi_env env, const std::string &taskId)
 {
@@ -314,6 +354,10 @@ void CallbackManager::InvokeSuccessCallbacks(
     }
 }
 
+// Schedules the error callbacks of url on the JS thread of env via
+// napi_send_event (high priority). On the JS thread an error object of shape
+// { errorCode: number, message: string } is built and passed as the single
+// argument to each error callback.
 void CallbackManager::InvokeErrorCallbacks(
     const std::string &url, std::shared_ptr<DownloadError> error, napi_env env, const std::string &taskId)
 {
@@ -347,6 +391,9 @@ void CallbackManager::InvokeErrorCallbacks(
     }
 }
 
+// Returns whether the calling process holds ohos.permission.INTERNET. The
+// result is computed once and cached for the process lifetime, so a later
+// permission revocation is not re-checked.
 bool CheckInternetPermission()
 {
     static bool hasPermission = []() {
@@ -361,6 +408,9 @@ bool CheckInternetPermission()
     return hasPermission;
 }
 
+// Returns whether the calling process holds
+// ohos.permission.GET_NETWORK_INFO; computed once and cached like
+// CheckInternetPermission().
 bool CheckNetworkInfoPermission()
 {
     static bool hasPermission = []() {
@@ -375,6 +425,10 @@ bool CheckNetworkInfoPermission()
     return hasPermission;
 }
 
+// Builds the PreloadCallback handed to Preload::load(). Both handlers forward
+// to the CallbackManager, which hops to the JS thread before touching any
+// napi value. OnFail maps the native ErrorKind to the public ErrorCode (IO and
+// unmapped kinds fall back to OTHERS) and wraps it with the error message.
 PreloadCallback CreatePreloadCallback(napi_env env, const std::string url)
 {
     auto &cbManager = CallbackManager::GetInstance();
@@ -418,6 +472,15 @@ PreloadCallback CreatePreloadCallback(napi_env env, const std::string url)
     };
 }
 
+/**
+ * @brief JS API download(url: string, options?: object): void.
+ *
+ * Requires the INTERNET permission. Starts preloading url into the two-level
+ * cache. options may carry headers, sslType, caPath, cacheStrategy,
+ * maxRetryCount, networkCheckTimeout and httpTotalTimeout; a wrong-typed or
+ * out-of-range numeric field throws a parameter error. Completion is reported
+ * through the onDownloadSuccess/onDownloadError callbacks.
+ */
 napi_value download(napi_env env, napi_callback_info info)
 {
     if (!CheckInternetPermission()) {
@@ -462,6 +525,12 @@ napi_value download(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API cancel(url: string): void.
+ *
+ * Cancels the in-flight preload task for url; a wrong-typed or oversized url
+ * throws a parameter error.
+ */
 napi_value cancel(napi_env env, napi_callback_info info)
 {
     size_t argc = 1;
@@ -481,6 +550,12 @@ napi_value cancel(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API setMemoryCacheSize(size: number): void.
+ *
+ * Sets the RAM cache capacity in bytes; a non-number or a value above 1 GiB
+ * throws a parameter error.
+ */
 napi_value setMemoryCacheSize(napi_env env, napi_callback_info info)
 {
     size_t argc = 1;
@@ -500,6 +575,12 @@ napi_value setMemoryCacheSize(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API setFileCacheSize(size: number): void.
+ *
+ * Sets the file cache capacity in bytes; a non-number or a value above 4 GiB
+ * throws a parameter error.
+ */
 napi_value setFileCacheSize(napi_env env, napi_callback_info info)
 {
     size_t argc = 1;
@@ -519,6 +600,12 @@ napi_value setFileCacheSize(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API setDownloadInfoListSize(size: number): void.
+ *
+ * Sets how many download-info records are retained; size must be a number in
+ * [0, 8192] or a parameter error is thrown.
+ */
 napi_value setDownloadInfoListSize(napi_env env, napi_callback_info info)
 {
     size_t argc = 1;
@@ -542,6 +629,12 @@ napi_value setDownloadInfoListSize(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API getDownloadInfo(url: string): object | undefined.
+ *
+ * Requires the GET_NETWORK_INFO permission. Returns the timing and size
+ * statistics collected for url, or undefined when no statistics exist.
+ */
 napi_value getDownloadInfo(napi_env env, napi_callback_info info)
 {
     if (!CheckNetworkInfoPermission()) {
@@ -571,18 +664,35 @@ napi_value getDownloadInfo(napi_env env, napi_callback_info info)
     return BuildDownloadInfo(env, result.value());
 }
 
+/**
+ * @brief JS API clearMemoryCache(): void.
+ *
+ * Drops every RAM cache entry; takes no arguments and never throws.
+ */
 napi_value clearMemoryCache(napi_env env, napi_callback_info info)
 {
     Preload::GetInstance()->ClearMemoryCache();
     return nullptr;
 }
 
+/**
+ * @brief JS API clearFileCache(): void.
+ *
+ * Drops every file cache entry (files of running tasks are kept); takes no
+ * arguments and never throws.
+ */
 napi_value clearFileCache(napi_env env, napi_callback_info info)
 {
     Preload::GetInstance()->ClearFileCache();
     return nullptr;
 }
 
+/**
+ * @brief JS API onDownloadSuccess(url: string, callback: function): void.
+ *
+ * Registers callback for url; it is invoked with a single argument when the
+ * preload completes. Registering an equal function again is deduplicated.
+ */
 napi_value onDownloadSuccess(napi_env env, napi_callback_info info)
 {
     size_t argc = TWO_ARG;
@@ -621,6 +731,13 @@ napi_value onDownloadSuccess(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API onDownloadError(url: string, callback: function): void.
+ *
+ * Registers callback for url; it is invoked with a single { errorCode,
+ * message } argument when the preload fails. Registering an equal function
+ * again is deduplicated.
+ */
 napi_value onDownloadError(napi_env env, napi_callback_info info)
 {
     size_t argc = TWO_ARG;
@@ -657,6 +774,12 @@ napi_value onDownloadError(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API offDownloadSuccess(url: string, callback?: function): void.
+ *
+ * Removes the given success callback for url, or all of them when callback is
+ * omitted.
+ */
 napi_value offDownloadSuccess(napi_env env, napi_callback_info info)
 {
     size_t argc = TWO_ARG;
@@ -699,6 +822,12 @@ napi_value offDownloadSuccess(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API offDownloadError(url: string, callback?: function): void.
+ *
+ * Removes the given error callback for url, or all of them when callback is
+ * omitted.
+ */
 napi_value offDownloadError(napi_env env, napi_callback_info info)
 {
     size_t argc = TWO_ARG;
@@ -741,6 +870,13 @@ napi_value offDownloadError(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API setGlobalRetryOptions(options?: object): void.
+ *
+ * Sets the process-wide retry count for tasks without their own override.
+ * Calling without options (or with a missing field) applies the default of 1.
+ * maxRetryCount must be a number in [0, 10] or a parameter error is thrown.
+ */
 napi_value setGlobalRetryOptions(napi_env env, napi_callback_info info)
 {
     size_t argc = 1;
@@ -769,6 +905,14 @@ napi_value setGlobalRetryOptions(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+/**
+ * @brief JS API setGlobalTimeoutOptions(options?: object): void.
+ *
+ * Sets the process-wide timeouts in seconds for tasks without their own
+ * override. Missing options or fields apply the defaults (20s network check,
+ * 60s HTTP total). networkCheckTimeout must be in [0, 20] and httpTotalTimeout
+ * in [1, uint32 max / 1000], else a parameter error is thrown.
+ */
 napi_value setGlobalTimeoutOptions(napi_env env, napi_callback_info info)
 {
     size_t argc = 1;
@@ -806,6 +950,7 @@ napi_value setGlobalTimeoutOptions(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+// Builds the SslType constant object { TLS, TLCP } exposed on the module.
 static void NapiCreateEnumSslType(napi_env env, napi_value &sslType)
 {
     napi_create_object(env, &sslType);
@@ -813,6 +958,8 @@ static void NapiCreateEnumSslType(napi_env env, napi_value &sslType)
     SetStringPropertyUtf8(env, sslType, "TLCP", "TLCP");
 }
 
+// Builds the CacheStrategy constant object { FORCE, LAZY } exposed on the
+// module.
 static void NapiCreateEnumCacheStrategy(napi_env env, napi_value &cacheStrategy)
 {
     napi_create_object(env, &cacheStrategy);
@@ -820,6 +967,8 @@ static void NapiCreateEnumCacheStrategy(napi_env env, napi_value &cacheStrategy)
     SetUint32Property(env, cacheStrategy, "LAZY", static_cast<uint32_t>(CacheStrategy::LAZY));
 }
 
+// Builds the ErrorCode constant object { OTHERS, DNS, TCP, SSL, HTTP } exposed
+// on the module; the values match the ErrorCode enum in preload_module.h.
 static void NapiCreateEnumErrorCode(napi_env env, napi_value &errorCode)
 {
     napi_create_object(env, &errorCode);
@@ -830,6 +979,8 @@ static void NapiCreateEnumErrorCode(napi_env env, napi_value &errorCode)
     SetUint32Property(env, errorCode, "HTTP", static_cast<uint32_t>(ErrorCode::HTTP));
 }
 
+// Module registration callback: exposes the enum constant objects and the JS
+// functions above on the module's exports.
 static napi_value registerFunc(napi_env env, napi_value exports)
 {
     napi_value sslType = nullptr;
@@ -865,6 +1016,8 @@ static napi_value registerFunc(napi_env env, napi_value exports)
 
 } // namespace OHOS::Request
 
+// Library constructor: registers the "request.cacheDownload" module with the
+// NAPI framework when the library is loaded.
 static __attribute__((constructor)) void RegisterModule()
 {
     static napi_module module = { .nm_version = 1,

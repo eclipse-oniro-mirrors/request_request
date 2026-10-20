@@ -631,17 +631,11 @@ impl CacheManager {
         self.file_manager.set_file_cache_size(size);
     }
 
-    /// Restores all valid cache files from the given directory.
+    /// Rebuilds the file cache index from the cache directory on disk.
     ///
-    /// Scans the directory for valid cache files, filters out incomplete files,
-    /// sorts them by modification time, and returns an iterator over the task
-    /// IDs.
-    ///
-    /// # Arguments
-    /// * `path` - Path to the directory to scan
-    ///
-    /// # Returns
-    /// Iterator over task IDs of valid cache files
+    /// Scans the cache directory and tries to restore every complete cache
+    /// file into the index. Once a file fails to be restored, all remaining
+    /// files are treated as invalid and removed from disk.
     pub fn build_cached_files_index(&'static self) {
         if let Some(file_info) = get_cached_files_info() {
             let mut is_continue = true;
@@ -670,9 +664,11 @@ impl CacheManager {
     /// # Returns
     /// `Some(Arc<RamCache>)` if found, `None` otherwise
     ///
-    /// # Safety
-    /// Must be called with a `'static self` reference as it may load from file
-    /// cache.
+    /// # Note
+    /// Takes `&'static self` (the process-wide singleton) because caches
+    /// loaded from the file store keep a back-reference to the manager to
+    /// release their quota when dropped, so the manager must outlive every
+    /// cache entry.
     pub fn fetch(&'static self, task_id: &TaskId) -> Option<Arc<RamCache>> {
         self.get_cache(task_id)
     }

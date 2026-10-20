@@ -59,6 +59,14 @@ enum class CallbackType {
     ERROR
 };
 
+/**
+ * @brief Registry of JS callbacks registered for one URL and one callback
+ * type (success or error).
+ *
+ * Holds strong references (napi_ref) to every registered JS function. Removals
+ * requested while an invocation is in flight are deferred: the entry is marked
+ * inactive and physically removed once the invocation finishes.
+ */
 class CallbackInfo {
     friend class CallbackManager;
 
@@ -68,36 +76,69 @@ public:
     {
     }
     
+    // Removes one callback (or all when cb is null). Removals requested while
+    // an invocation is in flight are deferred by marking entries inactive.
     napi_status RemoveCallback(napi_value cb);
+    // Registers a JS function; registering a function already in the list
+    // (strict equality) reactivates it instead of adding a duplicate.
     napi_status RegisterCallback(napi_value cb);
+    // Invokes every active success callback with a single argument on the JS
+    // thread, then physically removes deferred entries.
     void InvokeSuccessCallbacks(napi_value values[]);
+    // Invokes every active error callback with a single argument on the JS
+    // thread, then physically removes deferred entries.
     void InvokeErrorCallbacks(napi_value values[]);
 
 protected:
+    // napi environment all callbacks of this URL were registered on.
     const napi_env env_;
+    // URL this registry is keyed by.
     const std::string url_;
+    // All registered callbacks as (isActive, napi_ref) pairs; isActive == false
+    // marks an entry removed while an invocation is in flight.
     std::list<std::pair<bool, napi_ref>> allCb_;
+    // Guards allCb_ and the deletion bookkeeping below.
     std::recursive_mutex allCbMutex_;
+    // Number of active callbacks; 0 means there is nothing left to invoke.
     std::atomic<uint32_t> validCbNum{ 0 };
+    // True while Invoke*Callbacks is iterating; forces removals to be deferred.
     bool isInvoked_{ false };
+    // Number of inactive entries waiting to be physically removed by
+    // CleanupCallbacks().
     size_t toDeleteCount_{ 0 };
     
+    // Physically removes all inactive entries and deletes their references.
     void CleanupCallbacks();
 };
 
 class Data;
 
+/**
+ * @brief Process-wide registry of cache download callbacks, keyed by URL.
+ *
+ * Keeps two maps (success and error) of per-URL CallbackInfo. Native download
+ * completion arrives on non-JS threads, so invocation is scheduled onto the JS
+ * thread with napi_send_event before any JS function is called.
+ */
 class CallbackManager {
 public:
+    // Returns the process-wide singleton.
     static CallbackManager &GetInstance();
     
+    // Registers cb as a success/error callback for url, creating the per-URL
+    // CallbackInfo on first use. A null cb is ignored.
     napi_status RegisterCallback(const std::string& url, CallbackType type, napi_env env, napi_value callback);
     
+    // Removes one callback (all when callback is null) for url; creates an
+    // empty per-URL entry when none exists yet.
     napi_status RemoveCallback(const std::string& url, CallbackType type, napi_env env, napi_value callback);
     
+    // Schedules invocation of url's success callbacks on the JS thread.
     void InvokeSuccessCallbacks(const std::string& url,
         std::shared_ptr<Data> data, napi_env env, const std::string& taskId);
     
+    // Schedules invocation of url's error callbacks on the JS thread with an
+    // error object of shape { errorCode, message }.
     void InvokeErrorCallbacks(const std::string& url,
         std::shared_ptr<DownloadError> error, napi_env env, const std::string& taskId);
   
@@ -107,10 +148,14 @@ private:
     CallbackManager(const CallbackManager&) = delete;
     CallbackManager& operator=(const CallbackManager&) = delete;
     
+    // Guards the two maps below (map lookups only; per-URL work locks the
+    // CallbackInfo itself).
     std::recursive_mutex mgrMutex_;
     
+    // Success callbacks keyed by URL.
     std::map<std::string, std::shared_ptr<CallbackInfo>> successCallbacks_;
     
+    // Error callbacks keyed by URL.
     std::map<std::string, std::shared_ptr<CallbackInfo>> errorCallbacks_;
 };
 
