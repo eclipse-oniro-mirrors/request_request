@@ -137,4 +137,4 @@ private:
 };
 } // namespace OHOS::Request
 
-#endif // REQUEST_TASK_NAPI
+#endif // REQUEST_TASK_NAPI_H

@@ -953,11 +953,13 @@ impl RequestDb {
     }
 }
 
-// SAFETY: RequestDb is safe to share across threads because the only
-// non-Send/Sync field is the raw `RequestDataBase` pointer (oh) or the
-// rusqlite Connection (not-oh), both of which are guarded by the surrounding
-// Mutex-protected cache and only accessed through pinned borrows that the
-// caller synchronizes.
+// SAFETY: RequestDb is a process-wide singleton shared across threads.
+// - `user_file_tasks` is a `Mutex`, so it is safe to share by construction.
+// - `inner` (the raw `RequestDataBase` pointer on oh, the rusqlite
+//   `Connection` on not-oh) is not `Sync` on its own and is not locked in
+//   this file; the impl relies on the underlying store being internally
+//   synchronized (the Rdb store behind the C++ bridge on oh) and, on
+//   not-oh, on use being confined to host-side tests.
 unsafe impl Send for RequestDb {}
 unsafe impl Sync for RequestDb {}
 

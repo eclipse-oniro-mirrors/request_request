@@ -255,6 +255,9 @@ int32_t CUrlAdp::UploadOneFile()
     return CheckUploadStatus(curlMulti_);
 }
 
+// NOTE: despite the names, CurlGlobalInit/CurlGlobalCleanup do not call
+// curl_global_init/curl_global_cleanup; they only flip isCurlGlobalInit_
+// under a lock. Global curl initialization is not performed here.
 void CUrlAdp::CurlGlobalInit()
 {
     std::lock_guard<std::mutex> guard(globalMutex_);

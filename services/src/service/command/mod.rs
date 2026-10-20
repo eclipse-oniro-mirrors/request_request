@@ -19,27 +19,48 @@
 
 use crate::error::ErrorCode;
 
-mod construct;      // Task creation and configuration
-mod dump;           // Task information dumping utilities
-mod get_task;       // Task configuration retrieval
-mod notification_bar; // Notification system integration
-mod open_channel;   // Channel establishment for data transfer
-mod pause;          // Task pause operations
-mod query;          // Task state and information queries
-mod query_mime_type; // MIME type detection for resources
-mod remove;         // Task deletion operations
-mod resume;         // Task resumption operations
-mod search;         // Task searching functionality
-mod set_max_speed;  // Bandwidth control for tasks
-mod set_mode;       // Task execution mode configuration
-mod show;           // Task visibility management
-mod start;          // Task start operations
-mod stop;           // Task termination operations
-mod sub_runcount;   // Running count subscription
-mod subscribe;      // Task event subscription
-mod touch;          // Task metadata updates
-mod unsub_runcount; // Running count unsubscription
-mod unsubscribe;    // Task event unsubscription
+/// Task creation and configuration
+mod construct;
+/// Task information dumping utilities
+mod dump;
+/// Task configuration retrieval
+mod get_task;
+/// Notification system integration
+mod notification_bar;
+/// Channel establishment for data transfer
+mod open_channel;
+/// Task pause operations
+mod pause;
+/// Task state and information queries
+mod query;
+/// MIME type detection for resources
+mod query_mime_type;
+/// Task deletion operations
+mod remove;
+/// Task resumption operations
+mod resume;
+/// Task searching functionality
+mod search;
+/// Bandwidth control for tasks
+mod set_max_speed;
+/// Task execution mode configuration
+mod set_mode;
+/// Task visibility management
+mod show;
+/// Task start operations
+mod start;
+/// Task termination operations
+mod stop;
+/// Running count subscription
+mod sub_runcount;
+/// Task event subscription
+mod subscribe;
+/// Task metadata updates
+mod touch;
+/// Running count unsubscription
+mod unsub_runcount;
+/// Task event unsubscription
+mod unsubscribe;
 
 /// Maximum number of concurrent control operations allowed.
 pub(crate) const CONTROL_MAX: usize = 500;

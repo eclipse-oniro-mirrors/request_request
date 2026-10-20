@@ -50,4 +50,4 @@ protected:
 
 } // namespace OHOS::Request
 
-#endif // OHOS_REQUEST_LISTENER_LIST_H
+#endif // REQUEST_LISTENER_LIST_H

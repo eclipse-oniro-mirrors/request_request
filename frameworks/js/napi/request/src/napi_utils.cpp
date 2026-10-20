@@ -758,7 +758,7 @@ bool Convert2File(napi_env env, napi_value jsFile, FileSpec &file)
         return false;
     }
     std::string mimeType = Convert2String(env, type);
-    // If it is empty, it need to be reset.
+    // A non-empty "type" marks the content type as user-specified.
     if (!mimeType.empty()) {
         file.hasContentType = true;
         file.type = mimeType;

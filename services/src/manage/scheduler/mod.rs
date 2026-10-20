@@ -49,6 +49,9 @@ use crate::task::reason::Reason;
 use crate::task::request_task::RequestTask;
 use crate::utils::get_current_timestamp;
 
+/// One month (30 days) in milliseconds; used by `clear_timeout_tasks` to
+/// drop tasks created more than a month ago. Mirrors `ONE_MONTH` (i64) in
+/// `manage/task_manager.rs`; keep the two in sync.
 const MILLISECONDS_IN_ONE_MONTH: u64 = 30 * 24 * 60 * 60 * 1000;
 
 // The basic processing logic of the Scheduler is as follows:
@@ -814,13 +817,14 @@ impl Scheduler {
         Ok(true)
     }
 
-    /// Clears tasks that have been inactive for more than one month.
+    /// Clears tasks that were created more than one month ago.
     ///
-    /// This method identifies tasks that were created more than one month ago
-    /// and stops them, removing them from the scheduling system.
+    /// Tasks are selected by creation time (`ctime`), not by last activity.
+    /// They are marked `Stopped` in the database and removed from QoS
+    /// scheduling.
     pub(crate) fn clear_timeout_tasks(&mut self) {
         let current_time = get_current_timestamp();
-        // Identify tasks older than one month
+        // Identify tasks created more than one month ago (by ctime)
         let timeout_tasks = self
             .tasks()
             .filter(|task| current_time - task.ctime > MILLISECONDS_IN_ONE_MONTH)

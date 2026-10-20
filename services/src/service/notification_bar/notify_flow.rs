@@ -38,6 +38,8 @@ use crate::task::config::Version;
 /// 
 /// Prevents excessive notification updates for better performance and user experience.
 /// Set to 1ms in test mode and 500ms in normal operation.
+/// Mirrors `NOTIFY_PROGRESS_INTERVAL` in `publish.rs`; keep the two constants
+/// in sync when either value changes.
 const NOTIFY_PROGRESS_INTERVAL: u64 = if cfg!(test) { 1 } else { 500 };
 
 /// Manages the notification flow for download tasks and task groups.
@@ -46,37 +48,40 @@ const NOTIFY_PROGRESS_INTERVAL: u64 = if cfg!(test) { 1 } else { 500 };
 /// maintaining state information and visibility settings for all tracked tasks.
 pub(crate) struct NotifyFlow {
     database: Arc<NotificationDb>,
-    // Maps task IDs to their notification type (group or individual)
+    /// Maps task IDs to their notification type (group or individual)
     notify_type_map: HashMap<u32, NotifyType>,
 
-    // Tracks last notification time for rate limiting
+    /// Tracks last notification time for rate limiting
     last_notify_map: HashMap<u32, u64>,
 
-    // Progress tracking for group notifications
+    /// Progress tracking for group notifications
     group_notify_progress: HashMap<u32, GroupProgress>,
-    // Customized notification content for groups
+    /// Customized notification content for groups
     group_customized_notify: HashMap<u32, Option<CustomizedNotification>>,
-    // Customized notification content for individual tasks
+    /// Customized notification content for individual tasks
     task_customized_notify: HashMap<u32, Option<CustomizedNotification>>,
-    // Cached visibility settings
+    /// Cached visibility setting for group progress notifications
     group_progress_visibility: HashMap<u32, bool>,
+    /// Cached visibility setting for group completion notifications
     group_completion_visibility: HashMap<u32, bool>,
+    /// Cached visibility setting for task progress notifications
     progress_visibility: HashMap<u32, bool>,
+    /// Cached visibility setting for task completion notifications
     completion_visibility: HashMap<u32, bool>,
-    // Channel for receiving notification events
+    /// Channel for receiving notification events
     rx: mpsc::UnboundedReceiver<NotifyInfo>,
 }
 
 pub(crate) struct GroupProgress {
-    // Individual task progress tracking
+    /// Individual task progress tracking
     task_progress: HashMap<u32, u64>,
-    // Total processed bytes across all tasks
+    /// Total processed bytes across all tasks
     total_progress: u64,
-    // Current state of each task
+    /// Current state of each task
     task_state: HashMap<u32, State>,
-    // Count of successfully completed tasks
+    /// Count of successfully completed tasks
     successful: usize,
-    // Count of failed tasks
+    /// Count of failed tasks
     failed: usize,
 }
 

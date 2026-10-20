@@ -151,7 +151,8 @@ impl RequestServiceStub {
         // Write individual results for each task
         for (c, info) in vec {
             reply.write(&(c as i32))?;
-            // TODO: Sends info only when ErrOk.
+            // The per-task code is written first; info is then serialized
+            // unconditionally, regardless of whether the code is an error.
             serialize_task_info(info, reply)?;
         }
         Ok(())

@@ -110,7 +110,8 @@ impl RequestServiceStub {
     ///
     /// # Notes
     ///
-    /// TODO: permission should match action.
+    /// The manager-permission check is not action-specific today.
+    // TODO: permission should match action.
     pub(crate) fn check_permission_or_uid(&self, task_id: u32, uid: u64) -> bool {
         let permission = PermissionChecker::check_manager();
         match permission.get_action() {

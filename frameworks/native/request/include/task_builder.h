@@ -59,8 +59,11 @@ public:
     // Sets the minimum speed requirement for the task.
     // If the transfer speed falls below the threshold for the specified duration,
     // the task will fail with a LOW_SPEED error.
-    // speed: Minimum speed threshold in bytes per second. 0 means no speed limit.
-    // duration: Duration in seconds to monitor the speed. 0 means no duration check.
+    // speed: Minimum speed threshold in bytes per second.
+    // duration: Duration in seconds to monitor the speed.
+    // Both values must be non-zero to enable the check; if either is 0 the
+    // whole low-speed check is disabled (the server requires
+    // speed > 0 && duration > 0, see services/src/task/client.rs).
     TaskBuilder &setMinSpeed(const MinSpeed &minSpeed);
 
 public:

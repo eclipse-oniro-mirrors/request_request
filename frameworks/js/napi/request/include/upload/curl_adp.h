@@ -87,6 +87,7 @@ private:
     static constexpr int TRANS_TIMEOUT_MS = 300 * 1000;
     static constexpr int READFILE_TIMEOUT_MS = 30 * 1000;
     static constexpr int TIMEOUTTYPE = 1;
+    // Polling interval for usleep during upload, in microseconds (1000 = 1 ms).
     static constexpr int FILE_UPLOAD_INTERVAL = 1000;
     static constexpr int COLLECT_DO_FLAG = 1;
     static constexpr int COLLECT_END_FLAG = 2;

@@ -34,6 +34,9 @@ use crate::task::request_task::RequestTask;
 use crate::utils::get_current_duration;
 
 /// Interval in milliseconds between progress notifications (500 ms).
+///
+/// Duplicated as a private constant in `notify_flow.rs` (1 ms under
+/// `cfg!(test)`); keep the two values in sync.
 pub(crate) const NOTIFY_PROGRESS_INTERVAL: u64 = 500;
 
 /// Central dispatcher for managing and publishing task notifications.

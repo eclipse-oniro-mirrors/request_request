@@ -96,13 +96,15 @@ pub(crate) struct RequestTask {
     /// Flag indicating whether background notification is enabled.
     pub(crate) background_notify: Arc<AtomicBool>,
 
-    /// Total size of files being transferred.
+    /// Total size of the transferred files, in bytes. Uploads start from the
+    /// sum of local file sizes; downloads start at -1 (unknown) and are set
+    /// to the Content-Length once it is received.
     pub(crate) file_total_size: AtomicI64,
 
     /// Rate limiting value in bytes per second.
     pub(crate) rate_limiting: AtomicU64,
 
-    /// Maximum speed achieved during the task in bytes per second.
+    /// Maximum speed limit in bytes per second.
     pub(crate) max_speed: AtomicI64,
 
     /// Last time progress was notified.
@@ -918,7 +920,8 @@ impl TaskStatus {
     ///
     /// # Arguments
     ///
-    /// * `mtime` - The modification timestamp to use.
+    /// * `mtime` - The modification timestamp to use, in milliseconds since
+    ///   the epoch.
     ///
     /// # Returns
     ///

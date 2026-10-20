@@ -367,7 +367,8 @@ bool JsInitialize::ParseAction(napi_env env, napi_value jsConfig, Action &action
     return true;
 }
 
-// Only use for Action::DOWNLOAD.
+// Called for every action, but only Action::DOWNLOAD parses "saveas"; for
+// other actions the field is simply cleared.
 bool JsInitialize::ParseSaveas(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     if (config.action != Action::DOWNLOAD) {

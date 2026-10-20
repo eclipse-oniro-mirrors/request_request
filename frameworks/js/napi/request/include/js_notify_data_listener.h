@@ -59,4 +59,4 @@ struct ReasonDataPtr {
 
 } // namespace OHOS::Request
 
-#endif // OHOS_REQUEST_JS_NOTIFY_DATA_LISTENER_H
+#endif // REQUEST_JS_NOTIFY_DATA_LISTENER_H

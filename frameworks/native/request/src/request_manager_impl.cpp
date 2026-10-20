@@ -334,7 +334,9 @@ int32_t RequestManagerImpl::SubRunCount(const sptr<NotifyInterface> &listener)
     if (proxy == nullptr) {
         REQUEST_HILOGE("Impl SubRunCount in, get request service proxy failed.");
         FwkRunningTaskCountManager::GetInstance()->SetSaStatus(false);
-        // Proxy does not affect sub runcount at framework.
+        // The SA is not running, but SubRunCount still succeeds: the
+        // framework keeps a local running-task count, and the subscription
+        // is restored when the SA comes back (see RestoreSubRunCount).
         return E_OK;
     }
     return proxy->SubRunCount(listener);
@@ -443,7 +445,8 @@ void RequestManagerImpl::OnWaitReceive(std::int32_t taskId, WaitingReason reason
 sptr<RequestServiceInterface> RequestManagerImpl::GetRequestServiceProxy(bool needLoadSA)
 {
     std::lock_guard<std::mutex> lock(serviceProxyMutex_);
-    // When SubRuncount/UnSubRuncount/RestoreSubRunCount/Remove need to get proxy but not need to load
+    // SubRunCount/UnsubRunCount/RestoreSubRunCount/Remove only want a proxy
+    // to an already-running SA and must not trigger an on-demand SA load.
     if (!needLoadSA) {
         sptr<ISystemAbilityManager> systemAbilityManager =
             SystemAbilityManagerClient::GetInstance().GetSystemAbilityManager();
@@ -531,9 +534,10 @@ bool RequestManagerImpl::UnsubscribeSA()
     }
     saChangeListener_ = nullptr;
 
-    // Not sure about the SA state when it was supposed to set requestServiceProxy_ to nullptr, but there
-    // was already retry logic in place when the message was sent, and also,
-    // SA accesses a low-memory framework and doesn't hang frequently.
+    // The proxy is intentionally not reset to nullptr here: the SA state is
+    // unknown at this point, stale proxy calls already go through retry
+    // logic on the send path, and GetRequestServiceProxy refreshes the
+    // proxy on the next use.
 
     REQUEST_HILOGI("UnsubscribeSA Success");
     return true;
@@ -563,7 +567,9 @@ RequestManagerImpl::SystemAbilityStatusChangeListener::SystemAbilityStatusChange
 {
 }
 
-// Sometimes too slow to return.
+// Called by SAMgr when the download SA has been loaded: re-invokes the
+// registered restore callback and re-subscribes the run-count listener if
+// observers exist.
 void RequestManagerImpl::SystemAbilityStatusChangeListener::OnAddSystemAbility(
     int32_t saId, const std::string &deviceId)
 {

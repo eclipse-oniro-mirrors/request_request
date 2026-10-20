@@ -128,4 +128,4 @@ private:
         const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, Config &config, ExceptionError &error);
 };
 } // namespace OHOS::Request
-#endif // JS_INITIALIZE_H
+#endif // REQUEST_JS_INITIALIZE_H

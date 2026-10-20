@@ -121,7 +121,8 @@ impl RequestServiceStub {
 
             // For privileged callers, get the actual task owner UID from database
             if permission {
-                // skip uid check if task used by innerkits
+                // innerkits callers act on behalf of the task owner, so replace
+                // the caller's uid with the owner's uid from the database
                 match RequestDb::get_instance().query_task_uid(task_id) {
                     Some(id) => uid = id,
                     None => {

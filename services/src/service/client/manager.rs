@@ -99,7 +99,6 @@ impl ClientManagerEntry {
 /// This struct maintains client connections, manages task-to-client mappings,
 /// and routes events between the service and its clients.
 pub(crate) struct ClientManager {
-    // map from pid to client and fd
     /// Map of process IDs to client channels and socket connections.
     clients: HashMap<u64, (UnboundedSender<ClientEvent>, Arc<UnixDatagram>)>,
     /// Map of task IDs to process IDs for notification routing.

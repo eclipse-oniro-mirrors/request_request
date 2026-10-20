@@ -41,7 +41,8 @@ pub const TOUCH: u32 = 9;
 pub const SEARCH: u32 = 10;
 /// Retrieves a task associated with a request.
 pub const GET_TASK: u32 = 11;
-/// Clears a request from the system.
+/// Handled by the server stub as an unconditional no-op: acknowledged with
+/// success, but no task is removed.
 pub const CLEAR: u32 = 12;
 /// Opens a communication channel for request updates.
 pub const OPEN_CHANNEL: u32 = 13;
@@ -61,7 +62,8 @@ pub const ATTACH_GROUP: u32 = 19;
 pub const DELETE_GROUP: u32 = 20;
 /// Sets the maximum speed limit for a task.
 pub const SET_MAX_SPEED: u32 = 21;
-/// Shows the progress of a task.
+/// Reserved code: no client proxy sends it and the server stub has no
+/// matching branch, so it falls through to the IPC failure code.
 pub const SHOW_PROGRESS: u32 = 22;
 /// Changes the mode of a task.
 pub const SET_MODE: u32 = 100;
