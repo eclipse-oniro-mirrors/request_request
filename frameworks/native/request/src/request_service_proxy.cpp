@@ -765,7 +765,9 @@ int32_t RequestServiceProxy::Remove(const std::string &tid, const Version versio
         REQUEST_HILOGE("End Request Remove, tid: %{public}s failed: %{public}d", tid.c_str(), ret);
         return ret;
     }
-    // API9 or lower will not return E_TASK_NOT_FOUND.
+    // For API9 compatibility the per-task result is discarded and E_OK is
+    // always returned; every error code is suppressed, not just
+    // E_TASK_NOT_FOUND.
     int32_t result = rets[0];
     if (version == Version::API9) {
         REQUEST_HILOGD("End Request Remove ok, tid: %{public}s", tid.c_str());

@@ -335,9 +335,11 @@ fn get_uuid_from_uid(uid: u64) -> u64 {
 /// the task's account is 0 (indicating it can run under any account).
 ///
 /// # Examples
-/// ```
-/// # use crate::task::files::check_current_account;
-/// // Assuming foreground account is 1
+///
+/// ```ignore
+/// // Illustrative only: the outcome depends on the runtime foreground
+/// // account, so this is not executed as a doctest. Assuming the
+/// // foreground account is 1:
 /// assert!(check_current_account(200000)); // task_account is 1
 /// assert!(check_current_account(0)); // account 0 can run under any account
 /// assert!(!check_current_account(400000)); // task_account is 2

@@ -108,7 +108,8 @@ impl RunCountManagerEntry {
             Ok(error_code) => error_code,
             Err(error) => {
                 error!("In `subscribe_run_count`, block on failed, err {}", error);
-                // todo: may be another error code
+                // The worker dropped the channel before acking; ErrorCode::Other
+                // is a catch-all here (a more specific code may be warranted).
                 ErrorCode::Other
             }
         }

@@ -97,4 +97,4 @@ private:
 };
 } // namespace OHOS::Request
 
-#endif // DOWNLOAD_EVENT_H
+#endif // REQUEST_REQUEST_EVENT_H

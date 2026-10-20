@@ -93,7 +93,9 @@ void JSNotifyDataListener::ProcessHeaderReceive(const std::shared_ptr<NotifyData
         NapiUtils::RemoveFile(filePath);
     }
     if (notifyData->version == Version::API10) {
-        // Waiting for "complete" to read and delete.
+        // API10 streams one body file per progress event: intermediate
+        // files are deleted right after being read, the last one on
+        // "complete".
         if (notifyData->type == SubscribeType::PROGRESS && index + 1 != len) {
             NapiUtils::RemoveFile(filePath);
         } else if (notifyData->type == SubscribeType::COMPLETED) {

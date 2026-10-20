@@ -23,6 +23,7 @@
 
 namespace OHOS::Request {
 constexpr const std::int32_t DECIMALISM = 10;
+// Minimum accepted value for maxSpeed: 16 KB/s (16384 bytes per second).
 constexpr const int64_t MIN_SPEED_LIMIT = 16 * 1024;
 static constexpr const char *EVENT_COMPLETED = "completed";
 static constexpr const char *EVENT_FAILED = "failed";

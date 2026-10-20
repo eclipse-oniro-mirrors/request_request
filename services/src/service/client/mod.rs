@@ -332,7 +332,6 @@ impl ClientManagerEntry {
     }
 }
 
-// uid and token_id will be used later
 /// Handles communication with a single client process.
 ///
 /// This struct manages the socket connection to a client process and handles
@@ -715,7 +714,8 @@ impl Client {
         }
 
         // Add extra information, respecting size limit
-        // The maximum length of the headers in uds should not exceed 8192
+        // Truncate the extras so their cumulative key+value size stays below
+        // HEADERS_MAX_SIZE (8192); the trailing '\0' separators are not counted
         let mut buf_size = 0;
         let index = notify_data
             .progress

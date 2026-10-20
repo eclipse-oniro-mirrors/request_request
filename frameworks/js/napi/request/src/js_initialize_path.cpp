@@ -79,7 +79,7 @@ bool JsInitialize::GetSandboxPath(const std::shared_ptr<OHOS::AbilityRuntime::Co
     return true;
 }
 
-// Must not user file.
+// The path must not be a user (fd-based) file.
 bool JsInitialize::StandardizePath(
     const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, const Config &config, std::string &path)
 {
@@ -199,6 +199,9 @@ void JsInitialize::StringTrim(std::string &str)
     return;
 }
 
+// Checks only that the path starts with one of the app-storage area
+// prefixes (/data/storage/el{1,2,5}/base); the per-app baseDir is filled in
+// but never compared against the path.
 bool JsInitialize::CheckBelongAppBaseDir(const std::string &filepath, std::string &baseDir)
 {
     if (!JsInitialize::GetAppBaseDir(baseDir)) {

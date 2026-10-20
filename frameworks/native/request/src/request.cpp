@@ -42,7 +42,9 @@ void Request::RemoveListener(const SubscribeType &type, const std::shared_ptr<IR
     }
 }
 
-// for api9, remove do not notify after complete/fail
+// For API9 clients: once a task has completed or failed, later REMOVE
+// notifications are suppressed (needRemove_ is reset to false on
+// complete/fail); API10 clients always receive them.
 bool Request::NeedNotify(const std::shared_ptr<NotifyData> &notifyData)
 {
     if (notifyData->type == SubscribeType::REMOVE && notifyData->version != Version::API10

@@ -194,7 +194,8 @@ void JsTask::AddTaskWhenCreate(std::shared_ptr<ContextInfo> context)
 {
     std::lock_guard<std::mutex> lockGuard(JsTask::taskMutex_);
     auto [it, inserted] = JsTask::taskContextMap_.try_emplace(context->tid, context);
-    // Unreachable.
+    // The task id is freshly generated at creation, so it cannot already
+    // exist in the map; this branch is not expected to run.
     if (!inserted) {
         REQUEST_HILOGE("CAddContext Exist %{public}s", context->tid.c_str());
     }

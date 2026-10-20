@@ -32,7 +32,6 @@ namespace OHOS::Request {
 static constexpr int32_t INT64_SIZE = 8;
 static constexpr int32_t INT32_SIZE = 4;
 static constexpr int32_t INT16_SIZE = 2;
-// static constexpr int32_t INT8_SIZE = 1;
 
 std::shared_ptr<OHOS::AppExecFwk::EventHandler> serviceHandler_;
 

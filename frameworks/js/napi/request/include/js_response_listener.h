@@ -39,4 +39,4 @@ private:
 
 } // namespace OHOS::Request
 
-#endif // OHOS_REQUEST_JS_RESPONSE_LISTENER_H
+#endif // REQUEST_JS_RESPONSE_LISTENER_H

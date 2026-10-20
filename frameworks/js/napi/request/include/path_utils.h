@@ -34,4 +34,4 @@ public:
     static std::string ShieldPath(const std::string &path);
 };
 } // namespace OHOS::Request
-#endif // PATH_UTILS
+#endif // REQUEST_PATH_UTILS_H

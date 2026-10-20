@@ -145,7 +145,7 @@ bool JsInitialize::CheckPathIsFile(const std::string &path, ExceptionError &erro
 
 bool JsInitialize::GetFdDownload(const std::string &path, const Config &config, ExceptionError &error)
 {
-    // File is exist.
+    // The target file already exists.
     if (JsInitialize::FindDir(path)) {
         if (config.firstInit && !config.overwrite) {
             error.code = config.version == Version::API10 ? E_FILE_IO : E_FILE_PATH;
@@ -270,7 +270,9 @@ bool JsInitialize::CheckUploadFiles(
         error.errInfo = "Parameter verification failed, upload by multipart file so many";
         return false;
     }
-    // need reconstruction.
+    // Handle user (fd-based) files, which are only allowed for
+    // request.agent (API10+); all other files go through the regular
+    // upload file-spec check.
     for (auto &file : config.files) {
         if (IsUserFile(file.uri)) {
             file.isUserFile = true;

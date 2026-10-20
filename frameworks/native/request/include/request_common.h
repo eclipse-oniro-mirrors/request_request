@@ -147,8 +147,11 @@ struct Notification {
 // If the transfer speed falls below the threshold for the specified duration,
 // the task will fail with a LOW_SPEED error.
 struct MinSpeed {
-    int64_t speed = 0;    // Minimum speed threshold in bytes per second. 0 means no speed limit.
-    int64_t duration = 0; // Duration in seconds to monitor the speed. 0 means no duration check.
+    int64_t speed = 0;    // Minimum speed threshold in bytes per second.
+    int64_t duration = 0; // Duration in seconds to monitor the speed.
+    // The low-speed check is enabled only when BOTH values are non-zero; if
+    // either is 0 the check is disabled entirely (the server requires
+    // speed > 0 && duration > 0, see services/src/task/client.rs).
 };
 
 // Timeout configuration for download/upload tasks.

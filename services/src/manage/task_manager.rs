@@ -239,7 +239,8 @@ impl TaskManager {
                 TaskManagerEvent::Schedule(event) => {
                     if self.handle_schedule_event(event) {
                         info!("TaskManager unload ok");
-                        // If unload_sa success, can not breaks this loop.
+                        // The SA has been unloaded, but the loop keeps
+                        // running to drain any remaining events.
                     }
                 }
                 TaskManagerEvent::Device(level) => {
@@ -516,7 +517,8 @@ impl TaskManager {
             return true;
         }
 
-        // check rx again for there may be new message arrive.
+        // Check rx again: new messages may have arrived since the
+        // running-task check above.
         if !self.rx.is_empty() {
             return true;
         }
@@ -542,6 +544,9 @@ impl TaskManager {
         }
 
         const REQUEST_SERVICE_ID: i32 = 3706;
+        /// One month (30 days) in milliseconds; mirrors
+        /// `MILLISECONDS_IN_ONE_MONTH` (u64) in `manage/scheduler/mod.rs`.
+        /// Keep the two in sync.
         const ONE_MONTH: i64 = 30 * 24 * 60 * 60 * 1000;
 
         let db = RequestDb::get_instance();
@@ -567,7 +572,9 @@ impl TaskManager {
             info!("Update on demand policy failed");
         }
 
-        // failed logic?
+        // OH-only: the unload result is discarded and the function still
+        // returns true; whether a failed unload should be reported is
+        // unresolved.
         #[cfg(feature = "oh")]
         let _ = SystemAbilityManager::unload_system_ability(REQUEST_SERVICE_ID);
 

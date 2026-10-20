@@ -158,4 +158,4 @@ std::string SHA256(const char *str, size_t len);
 void ReadBytesFromFile(const std::string &filePath, std::vector<uint8_t> &fileData);
 void RemoveFile(const std::string &filePath);
 } // namespace OHOS::Request::NapiUtils
-#endif /* DOWNLOAD_NAPI_UTILS_H */
+#endif /* REQUEST_NAPI_UTILS_H */
