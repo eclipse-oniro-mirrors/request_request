@@ -49,6 +49,10 @@ std::string RequestManager::GetTaskToken()
     return "Download-Task-" + std::to_string(id);
 }
 
+// Deferred JS call: hops to the JS thread via napi_send_event — inside
+// the event, a handle scope is opened, the generator fills the call
+// frame, the callback is invoked and both references are released. No
+// napi call happens on the caller's thread.
 void RequestManager::CallFunctionAsync(napi_env env, napi_ref func, const ArgsGenerator &generator)
 {
     auto *data = new (std::nothrow) CallFunctionData;
@@ -135,6 +139,7 @@ std::string RequestManager::GetFilenameFromUrl(std::string &url)
     return url;
 }
 
+// Cache dir of the current (FA-model) ability.
 std::string RequestManager::GetCacheDir(napi_env env)
 {
     auto ability = AbilityRuntime::GetCurrentAbility(env);
@@ -151,6 +156,7 @@ std::string RequestManager::GetCacheDir(napi_env env)
     return abilityContext->GetCacheDir();
 }
 
+// Flattens the header map into curl header lines "name:value".
 std::vector<std::string> RequestManager::ParseHeader(napi_env env, napi_value option)
 {
     if (!NapiUtils::HasNamedProperty(env, option, "header")) {
@@ -172,6 +178,9 @@ std::vector<std::string> RequestManager::ParseHeader(napi_env env, napi_value op
     return headerVector;
 }
 
+// Options → DownloadOption: the ability cache dir as fileDir; filename
+// defaults to the last url segment, with a numeric suffix appended until
+// it no longer collides with an existing file.
 DownloadTask::DownloadOption RequestManager::ParseOption(napi_env env, napi_value option)
 {
     DownloadTask::DownloadOption downloadOption;
@@ -195,6 +204,7 @@ DownloadTask::DownloadOption RequestManager::ParseOption(napi_env env, napi_valu
     return downloadOption;
 }
 
+// The file's directory (after realpath) must stay inside the cache dir.
 bool RequestManager::IsPathValid(const std::string &dir, const std::string &filename)
 {
     auto filepath = dir + '/' + filename;
@@ -207,6 +217,7 @@ bool RequestManager::IsPathValid(const std::string &dir, const std::string &file
     return false;
 }
 
+// Whether another in-flight legacy download already uses this filename.
 bool RequestManager::HasSameFilename(const std::string &filename)
 {
     std::lock_guard<std::mutex> lockGuard(lock_);
@@ -273,6 +284,8 @@ napi_value RequestManager::Download(napi_env env, napi_callback_info info)
     return res;
 }
 
+// Pins the options object and its success/fail callbacks on the token's
+// descriptor; an unknown token fails immediately with 401.
 napi_value RequestManager::OnDownloadComplete(napi_env env, napi_callback_info info)
 {
     size_t argc = DOWNLOAD_ARGC;

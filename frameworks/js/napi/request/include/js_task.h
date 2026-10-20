@@ -22,9 +22,30 @@
 #include "request_common.h"
 
 namespace OHOS::Request {
+// JS-side Task object and the module-level task entries of @ohos.request.
+//
+// Each JS Task instance wraps one task id and carries the parsed Config,
+// the response/notify-data listeners and the tid; all task behavior
+// (scheduling, transfer, persistence) stays in the server SA — the
+// entries below only marshal JS calls into IPC via RequestManager.
+//
+// Two families of entries:
+// - Creation: JsCreate (request.agent.create, API10), JsRequestFile
+//   (downloadFile/uploadFile, API9), JsUpload/JsDownload (request.upload/
+//   download, API8; their API5-7 legacy signatures are peeled off inside
+//   and routed to the in-process upload task / legacy request manager).
+// - Operations on a tid: GetTask/Remove/Show/Touch/Search/Query, all
+//   AsyncCall-based (promise or callback delivery).
+// The statics manage the per-process task table taskContextMap_: SA
+// subscription while any task exists, ACL grant/release for sandbox
+// paths, cert staging, temp-file and reference cleanup.
 class JsTask {
 public:
     ~JsTask();
+    /// Per-task state shared by the create/getTask flows; lives in
+    /// taskContextMap_ (keyed by tid) while the task is addressable from
+    /// this process. token defaults to "null" when the JS call passed
+    /// none; baseContext holds the caller's ability context reference.
     struct ContextInfo : public AsyncCall::Context {
         JsTask *task = nullptr;
         napi_ref taskRef = nullptr;
@@ -34,22 +55,43 @@ public:
         std::string token = "null";
         bool contextIf = false;
     };
+    /// request.agent.create (API10).
     static napi_value JsCreate(napi_env env, napi_callback_info info);
+    /// request.upload: API5-7 callback-style calls go to the in-process
+    /// UploadTaskNapiV5; options-object calls continue as API8.
     static napi_value JsUpload(napi_env env, napi_callback_info info);
+    /// request.download: the legacy signature goes to
+    /// Legacy::RequestManager, otherwise continues as API8.
     static napi_value JsDownload(napi_env env, napi_callback_info info);
     static napi_value JsRequest(napi_env env, napi_callback_info info);
+    /// request.downloadFile/uploadFile (API9): one native entry, the
+    /// action is inferred from the options object.
     static napi_value JsRequestFile(napi_env env, napi_callback_info info);
 
+    /// request.agent.getTask(context, tid, token?): returns the live JS
+    /// Task object when this process created the task (token must match),
+    /// otherwise constructs one from the server's task config.
     static napi_value GetTask(napi_env env, napi_callback_info info);
     static napi_value Remove(napi_env env, napi_callback_info info);
+    /// show/touch both call the server Touch and return the TaskInfo;
+    /// show takes only the tid, touch additionally requires the token.
     static napi_value Show(napi_env env, napi_callback_info info);
     static napi_value Touch(napi_env env, napi_callback_info info);
+    /// request.agent.search(filter?): tids matching bundle/state/action/
+    /// mode and the [after, before] time window (default last day).
     static napi_value Search(napi_env env, napi_callback_info info);
     static napi_value Query(napi_env env, napi_callback_info info);
 
     std::string GetTid();
     void SetTid(std::string &tid);
 
+    // Task-table management: SubscribeSA/UnsubscribeSA keep the SA-death
+    // listener in sync with taskContextMap_ occupancy; ReloadListener
+    // re-subscribes every live tid after the SA restarted; the
+    // permission/cleanup helpers release ACLs, certs and temp files when a
+    // task ends (ClearTaskTemp deletes body files only, ClearTaskThing is
+    // the full release, RemoveTaskContext also drops the map entry and JS
+    // references).
     static void SubscribeSA();
     static void UnsubscribeSA();
     static void ReloadListener();
@@ -59,6 +101,13 @@ public:
     static void RemoveDirsPermission(const std::vector<std::string> &dirs);
     static void RemoveTaskContext(const std::string &tid);
 
+    // Per-task state: config_ is the parsed creation config; isGetPermission
+    // tracks whether the sandbox ACLs were granted for this task;
+    // register_ guards the one-per-process foreground-resume callback
+    // (see AppStateCallback); taskContextMap_ (taskMutex_) holds every task
+    // created in this process; the listeners receive the server's UDS
+    // pushes (responseListener_ for responses, notifyDataListenerMap_ per
+    // SubscribeType for events, listenerMutex_ guards the map).
     Config config_;
     bool isGetPermission;
     static bool register_;
@@ -70,10 +119,13 @@ public:
     std::map<SubscribeType, std::shared_ptr<JSNotifyDataListener>> notifyDataListenerMap_;
 
 private:
+    /// Carrier for a ContextInfo across the JS-thread cleanup callback
+    /// (see DeleteContextTaskRef in the .cpp).
     struct ContextCallbackData {
         std::shared_ptr<ContextInfo> context = nullptr;
     };
 
+    /// show/touch call state: tid + token in, TaskInfo out.
     struct TouchContext : public AsyncCall::Context {
         std::string tid;
         std::string token = "null";
@@ -125,6 +177,9 @@ private:
     static int32_t AuthorizePath(const Config &config);
     bool Equals(napi_env env, napi_value value, napi_ref copy);
 
+    // JS class constructor caches: one napi_ref per (thread, class) — each
+    // version's Task class is defined exactly once per thread, on first use,
+    // under the matching mutex.
     static std::mutex createMutex_;
     static thread_local napi_ref requestCtor;
     static std::mutex requestMutex_;
@@ -133,6 +188,7 @@ private:
     static thread_local napi_ref createCtor;
     static std::mutex getTaskCreateMutex_;
     static thread_local napi_ref getTaskCreateCtor;
+    // Task id assigned by the server at create time.
     std::string tid_;
 };
 } // namespace OHOS::Request

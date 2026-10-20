@@ -54,6 +54,8 @@ uint32_t ObtainFile::GetFile(FILE **file, const std::string &fileUri, unsigned i
     return ret;
 }
 
+// Sizes the file by seeking to the end (ftell); a -1 ftell aborts with
+// GET_FILE_ERROR.
 uint32_t ObtainFile::GetDataAbilityFile(FILE **file, const std::string &fileUri, uint32_t &fileSize,
     std::shared_ptr<OHOS::AbilityRuntime::Context> &context)
 {
@@ -114,6 +116,8 @@ bool ObtainFile::SplitPath(const std::string &fileUri, std::string &fileName)
     return true;
 }
 
+// Cache dir + relative name, symlink-checked through IsValidPath, then
+// fopen("r").
 uint32_t ObtainFile::GetInternalFile(FILE **file, const std::string &fileUri, uint32_t &fileSize,
     std::shared_ptr<OHOS::AbilityRuntime::Context> &context)
 {

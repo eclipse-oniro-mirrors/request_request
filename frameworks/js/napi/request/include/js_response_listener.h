@@ -20,6 +20,13 @@
 #include "listener_list.h"
 
 namespace OHOS::Request {
+// Listener for the request.agent "response" event. OnResponseReceive is
+// invoked on the UDS receive thread — no napi call happens there; the
+// response is marshalled to the JS thread via napi_send_event and only
+// converted/dispatched inside that event (handle scope → convert →
+// callback). The server subscription follows the JS listener count: the
+// first added callback subscribes via RequestManager, removing the last
+// one unsubscribes.
 class JSResponseListener
     : public IResponseListener
     , public ListenerList
@@ -33,6 +40,8 @@ public:
     void OnResponseReceive(const std::shared_ptr<Response> &response) override;
 
 private:
+    // Guards the stashed response so the JS-thread event can read what the
+    // UDS thread wrote.
     std::mutex responseMutex_;
     std::shared_ptr<Response> response_;
 };

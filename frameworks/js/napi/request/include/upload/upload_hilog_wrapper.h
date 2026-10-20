@@ -19,6 +19,10 @@
 #include "hilog/log.h"
 
 namespace OHOS::Request::Upload {
+// HiLog wrapper of the upload subtree: one log domain per submodule
+// (InnerKit / Framework / Common / JS NAPI / Test) and the
+// UPLOAD_HILOG* macros that prefix every line with
+// "[<file basename>] <function># ".
 // param of log interface, such as UPLOAD_HILOGF.
 enum UploadSubModule {
     UPLOAD_MODULE_INNERKIT = 0,
@@ -32,6 +36,8 @@ enum UploadSubModule {
 // 0xD001C50: subsystem:miscservices module:upload_native, 8 bits reserved.
 static constexpr unsigned int BASE_UPLOAD_DOMAIN_ID = 0xD001C50;
 
+// One domain id per submodule, derived from BASE_UPLOAD_DOMAIN_ID + the
+// UploadSubModule index.
 enum UploadDomainId {
     UPLOAD_INNERKIT_DOMAIN = BASE_UPLOAD_DOMAIN_ID + UPLOAD_MODULE_INNERKIT,
     UPLOAD_FRAMEWORK_DOMAIN,
@@ -41,6 +47,8 @@ enum UploadDomainId {
     UPLOAD_BUTT,
 };
 
+// Label table indexed by UploadSubModule, supplying each module's domain
+// and tag to the UPLOAD_HILOG* macros.
 static constexpr OHOS::HiviewDFX::HiLogLabel UPLOAD_MODULE_LABEL[UPLOAD_MODULE_BUTT] = {
     { LOG_CORE, UPLOAD_INNERKIT_DOMAIN, "UploadInnerKit" },
     { LOG_CORE, UPLOAD_FRAMEWORK_DOMAIN, "UploadFramework" },
@@ -49,7 +57,10 @@ static constexpr OHOS::HiviewDFX::HiLogLabel UPLOAD_MODULE_LABEL[UPLOAD_MODULE_B
     { LOG_CORE, UPLOAD_TEST, "UploadTest" },
 };
 
+// Basename of __FILE__ (strips the build-tree prefix paths).
 #define FILENAME (__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1 : __FILE__)
+// Format helper carrying the "[<file>] <function># " prefix; the
+// UPLOAD_HILOG* macros embed the same prefix inline.
 #define FORMATTED(fmt, ...) "[%{public}s] %{public}s# " fmt, FILENAME, __FUNCTION__, ##__VA_ARGS__
 
 // In order to improve performance, do not check the module range.

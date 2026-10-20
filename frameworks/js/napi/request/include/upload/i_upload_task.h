@@ -18,6 +18,9 @@
 
 #include "upload/upload_common.h"
 namespace OHOS::Request::Upload {
+// Tag interface of an upload task. CUrlAdp holds an IUploadTask purely
+// to tie its lifetime to the task, without depending on the concrete
+// type.
 class IUploadTask {
 public:
     virtual ~IUploadTask() = default;

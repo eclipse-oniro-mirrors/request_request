@@ -13,6 +13,20 @@
  * limitations under the License.
  */
 
+// NAPI module registration for @ohos.request (librequest.z.so).
+//
+// One module serves two API generations on the same export object:
+// - API9 legacy surface, installed by Init(): request.download/upload/
+//   downloadFile/uploadFile, onDownloadComplete, and the ERROR_* /
+//   PAUSED_* / SESSION_* / NETWORK_* / EXCEPTION_* constants.
+// - API10 task framework, installed by InitAgent() as the request.agent
+//   sub-object: enum constants plus create/getTask/remove/show/touch/
+//   search/query and the notification-bar group functions.
+//
+// All task work happens in the server SA; this module only converts
+// between JS values and the IPC types (client/server split per
+// docs/agent/feature-client.md).
+
 #include "constant.h"
 #include "js_task.h"
 #include "legacy/request_manager.h"
@@ -25,8 +39,15 @@
 #include "request_event.h"
 
 using namespace OHOS::Request;
+
+// Name of the system common event fired when a task completes; exposed to
+// JS as request.agent.BroadcastEvent.COMPLETE.
 static constexpr const char *BROADCAST_EVENT_COMPLETE = "ohos.request.event.COMPLETE";
 
+// Builders for the enum objects exposed on request.agent. Each creates a
+// plain JS object whose property values are the shared C++ enum values;
+// those numeric values are cross-process protocol constants (State, Faults
+// and WaitingReason mirror the server enums — append-only, never renumber).
 static void NapiCreateAction(napi_env env, napi_value &action)
 {
     napi_create_object(env, &action);
@@ -92,6 +113,8 @@ static void NapiCreateWaitingReason(napi_env env, napi_value &waitingReason)
         env, waitingReason, "USER_INACTIVATED", static_cast<uint32_t>(WaitingReason::UserInactivated));
 }
 
+// BroadcastEvent is string-valued (common-event names), unlike the numeric
+// enums above.
 static void NapiCreateBroadcastEvent(napi_env env, napi_value &broadcastEvent)
 {
     napi_create_object(env, &broadcastEvent);
@@ -99,6 +122,10 @@ static void NapiCreateBroadcastEvent(napi_env env, napi_value &broadcastEvent)
         env, broadcastEvent, "COMPLETE", static_cast<std::string>(BROADCAST_EVENT_COMPLETE));
 }
 
+// Populates the API10 request.agent sub-object: the enum/visibility
+// constants and the task management functions. The task functions land on
+// JsTask's static entry points; createGroup/attachGroup/deleteGroup come
+// from notification_bar (group progress management).
 static napi_value InitAgent(napi_env env, napi_value exports)
 {
     napi_value visibility_completion = nullptr;
@@ -151,6 +178,11 @@ static napi_value InitAgent(napi_env env, napi_value exports)
     return exports;
 }
 
+// Module init function (nm_register_func): runs when the JS runtime first
+// loads @ohos.request. Installs the API9 constants and entry functions
+// on the module exports and attaches the API10 agent sub-object.
+// downloadFile and uploadFile share one native entry (JsRequestFile),
+// which dispatches on the action field of the options object.
 static napi_value Init(napi_env env, napi_value exports)
 {
     napi_value exception_permission = nullptr;
@@ -268,6 +300,10 @@ static napi_value Init(napi_env env, napi_value exports)
     return exports;
 }
 
+// Runs automatically when librequest.z.so is loaded (constructor
+// attribute), registering the module with the JS runtime before any
+// import @ohos.request reaches it. nm_modname "request" binds the module
+// to the @ohos.request import path; nm_register_func is the Init() above.
 static __attribute__((constructor)) void RegisterModule()
 {
     static napi_module module = { .nm_version = 1,

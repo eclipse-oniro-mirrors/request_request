@@ -28,19 +28,40 @@
 #include "visibility.h"
 
 namespace OHOS::Request::Legacy {
+// Legacy in-process download manager behind the old callback-style
+// request.download signature (an options object carrying success/fail/
+// complete functions — IsLegacy). One DownloadDescriptor is kept per
+// in-flight DownloadTask; the completion callbacks attached via
+// OnDownloadComplete fire on the JS thread — OnTaskDone itself runs on
+// the download worker thread and only marshals the call through
+// CallFunctionAsync (napi_send_event), never calling napi directly.
 class RequestManager {
 public:
+    /// Whether the download call uses the legacy callback-style options
+    /// object.
     static bool IsLegacy(napi_env env, napi_callback_info info);
 
+    /// Legacy download entry: parse the options, validate the target
+    /// path and filename uniqueness, mint a token, report it synchronously
+    /// through the JS success callback, then start the detached curl
+    /// task.
     static napi_value Download(napi_env env, napi_callback_info info);
 
     REQUEST_API static napi_value OnDownloadComplete(napi_env env, napi_callback_info info);
 
+    /// DownloadTask completion hook (worker thread): pops the descriptor
+    /// and invokes the success callback with "internal://cache/<file>"
+    /// or the fail callback with (message, 400) on the JS thread, then
+    /// deletes the task.
     static void OnTaskDone(const std::string &token, bool successful, const std::string &errMsg);
 
 private:
+    /// Builds the JS-thread call frame (receiver, argc, argv) of a
+    /// deferred callback.
     using ArgsGenerator = std::function<void(napi_env env, napi_ref *recv, int &argc, napi_value *argv)>;
 
+    /// Per-task state: the owning task, the target filename, the env and
+    /// the pinned JS references (options object, success/fail callbacks).
     struct DownloadDescriptor {
         DownloadTask *task_{};
         std::string filename_;
@@ -50,6 +71,8 @@ private:
         napi_ref failCb_{};
     };
 
+    /// Heap payload of one deferred JS call, owned by the
+    /// napi_send_event lambda.
     struct CallFunctionData {
         napi_env env_{};
         napi_ref func_{};
@@ -78,8 +101,11 @@ private:
 
     static std::atomic<uint32_t> taskId_;
     static std::mutex lock_;
+    // In-flight tasks by token (guarded by lock_).
     static std::map<std::string, RequestManager::DownloadDescriptor> downloadDescriptors_;
 
+    // Callback argument counts and the fail-callback error codes: 400
+    // download error, 401 unknown token.
     static constexpr int DOWNLOAD_ARGC = 1;
     static constexpr int SUCCESS_CB_ARGC = 1;
     static constexpr int FAIL_CB_ARGC = 2;
@@ -87,6 +113,7 @@ private:
     static constexpr int FAIL_CB_TASK_NOT_EXIST = 401;
     static constexpr int MAX_CB_ARGS = 2;
 
+    // Path prefix reported back to JS for the downloaded file.
     static inline const std::string URI_PREFIX = "internal://cache/";
 };
 } // namespace OHOS::Request::Legacy

@@ -17,6 +17,8 @@
 
 namespace OHOS::Request {
 
+// Pins a new callback as a persistent reference (no-op when already
+// registered); JS thread only.
 napi_status ListenerList::AddListenerInner(napi_value cb)
 {
     std::lock_guard<std::recursive_mutex> lock(allCbMutex_);
@@ -36,6 +38,8 @@ napi_status ListenerList::AddListenerInner(napi_value cb)
     return napi_ok;
 }
 
+// Unflags the callback (every one when cb is null); the references
+// themselves are deleted lazily on the next dispatch.
 napi_status ListenerList::RemoveListenerInner(napi_value cb)
 {
     std::lock_guard<std::recursive_mutex> lock(allCbMutex_);
@@ -68,6 +72,8 @@ napi_status ListenerList::RemoveListenerInner(napi_value cb)
     return napi_ok;
 }
 
+// Dispatches to every live callback and lazily erases the removed ones
+// (reference deletion included).
 // In JS main thread.
 void ListenerList::OnMessageReceive(napi_value *value, uint32_t paramNumber)
 {
@@ -110,6 +116,7 @@ bool ListenerList::HasListener()
     return this->validCbNum != 0;
 }
 
+// Drops every callback reference immediately and resets the live count.
 void ListenerList::DeleteAllListenerRef()
 {
     std::lock_guard<std::recursive_mutex> lock(allCbMutex_);

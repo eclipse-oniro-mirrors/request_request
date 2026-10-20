@@ -30,6 +30,8 @@
 #include "want_agent_helper.h"
 #include "want_agent.h"
 
+// Field limits enforced by the config parsers: string length caps and the
+// timeout bounds (seconds).
 static constexpr const char *PARAM_KEY_DESCRIPTION = "description";
 static constexpr const char *PARAM_KEY_NETWORKTYPE = "networkType";
 static constexpr const char *PARAM_KEY_FILE_PATH = "filePath";
@@ -71,6 +73,8 @@ std::string GetHostnameFromURL(const std::string &url)
     return tempUrl.substr(posStart);
 }
 
+// Lenient per-field parsers with no failure paths, run by ParseConfig once
+// the strict field parsers have passed.
 void JsInitialize::ParseConfigInner(napi_env env, napi_value jsConfig, Config &config)
 {
     ParseCertificatePins(env, config.url, config.certificatePins);
@@ -83,6 +87,9 @@ void JsInitialize::ParseConfigInner(napi_env env, napi_value jsConfig, Config &c
     ParseGauge(env, jsConfig, config);
 }
 
+// Defaults the notification visibility from the optional "gauge" boolean:
+// COMPLETION|PROGRESS for a gauge task, COMPLETION otherwise; an explicit
+// notification.visibility wins (same defaulting as createGroup).
 void JsInitialize::ParseGauge(napi_env env, napi_value jsConfig, Config &config)
 {
     napi_value notificationValue = NapiUtils::GetNamedProperty(env, jsConfig, "notification");
@@ -104,6 +111,10 @@ void JsInitialize::ParseGauge(napi_env env, napi_value jsConfig, Config &config)
     }
 }
 
+// API10 config entry: strict per-field parsing (action, url, certsPath,
+// data, index, proxy, title, token, description, saveas, notification,
+// minSpeed, timeout), then the lenient second pass; non-API10 versions
+// dispatch to ParseConfigV9.
 bool JsInitialize::ParseConfig(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     if (NapiUtils::GetValueType(env, jsConfig) != napi_object) {
@@ -152,6 +163,7 @@ bool JsInitialize::ParseConfig(napi_env env, napi_value jsConfig, Config &config
     return true;
 }
 
+// roaming: absent → true for API10, false for earlier versions.
 void JsInitialize::ParseRoaming(napi_env env, napi_value jsConfig, Config &config)
 {
     if (!NapiUtils::HasNamedProperty(env, jsConfig, "roaming")) {
@@ -161,6 +173,8 @@ void JsInitialize::ParseRoaming(napi_env env, napi_value jsConfig, Config &confi
     }
 }
 
+// Serializes the optional notification wantAgent object into its string
+// form via WantAgentHelper; an unwrap failure is an error.
 bool JsInitialize::ParseNotificationWantAgent(napi_env env, napi_value notification, Config &config)
 {
     OHOS::AbilityRuntime::WantAgent::WantAgent *wantAgent = nullptr;
@@ -180,6 +194,10 @@ bool JsInitialize::ParseNotificationWantAgent(napi_env env, napi_value notificat
     return true;
 }
 
+// Parses the optional "notification" sub-object: title/text (length
+// caps), wantAgent, disable, visibility (must be a submask of
+// Visibility::ANY other than NONE — the same rule as createGroup's input)
+// and hideStopButton; undefined fields keep their defaults.
 bool JsInitialize::ParseNotification(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     napi_value notification = NapiUtils::GetNamedProperty(env, jsConfig, "notification");
@@ -224,6 +242,8 @@ bool JsInitialize::ParseNotification(napi_env env, napi_value jsConfig, Config &
     return true;
 }
 
+// Parses minSpeed {speed, duration}: both optional, non-negative numbers
+// when present.
 bool JsInitialize::ParseMinSpeed(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     napi_value minSpeed = NapiUtils::GetNamedProperty(env, jsConfig, "minSpeed");
@@ -260,6 +280,8 @@ bool JsInitialize::ParseMinSpeed(napi_env env, napi_value jsConfig, Config &conf
     return true;
 }
 
+// Parses the connectionTimeout and totalTimeout options, both in seconds:
+// connectionTimeout must be >= 1, totalTimeout within [1, 604800].
 bool JsInitialize::ParseTimeout(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     napi_value timeout = NapiUtils::GetNamedProperty(env, jsConfig, "timeout");
@@ -286,6 +308,8 @@ bool JsInitialize::ParseTimeout(napi_env env, napi_value jsConfig, Config &confi
     return true;
 }
 
+// network: any value other than ANY/WIFI/CELLULAR (including missing or
+// wrong type) falls back to ANY.
 void JsInitialize::ParseNetwork(napi_env env, napi_value jsConfig, Network &network)
 {
     network = static_cast<Network>(NapiUtils::Convert2Uint32(env, jsConfig, "network"));
@@ -294,6 +318,8 @@ void JsInitialize::ParseNetwork(napi_env env, napi_value jsConfig, Network &netw
     }
 }
 
+// Parses the optional token: absent or non-string keeps the default; when
+// present it must be a string of 8-2048 bytes.
 bool JsInitialize::ParseToken(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     char *token = nullptr;
@@ -330,6 +356,8 @@ bool JsInitialize::ParseToken(napi_env env, napi_value jsConfig, Config &config,
     return true;
 }
 
+// index: selects the file whose progress drives the notification for
+// uploads (default 0; must stay within files); downloads force 0.
 bool JsInitialize::ParseIndex(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     config.index = NapiUtils::Convert2Uint32(env, jsConfig, "index");
@@ -345,6 +373,7 @@ bool JsInitialize::ParseIndex(napi_env env, napi_value jsConfig, Config &config,
     return true;
 }
 
+// action (API10): required number, must be UPLOAD or DOWNLOAD.
 bool JsInitialize::ParseAction(napi_env env, napi_value jsConfig, Action &action, std::string &errInfo)
 {
     if (!NapiUtils::HasNamedProperty(env, jsConfig, "action")) {
@@ -392,12 +421,15 @@ bool JsInitialize::ParseSaveas(napi_env env, napi_value jsConfig, Config &config
     return true;
 }
 
+// begins: download range start byte, negatives clamp to 0.
 int64_t JsInitialize::ParseBegins(napi_env env, napi_value jsConfig)
 {
     int64_t size = NapiUtils::Convert2Int64(env, jsConfig, "begins");
     return size >= 0 ? size : 0;
 }
 
+// ends: download range end byte; missing or non-number → -1 (to the end
+// of the file).
 int64_t JsInitialize::ParseEnds(napi_env env, napi_value jsConfig)
 {
     if (!NapiUtils::HasNamedProperty(env, jsConfig, "ends")) {
@@ -429,6 +461,8 @@ bool JsInitialize::ParseDescription(napi_env env, napi_value jsConfig, std::stri
     return true;
 }
 
+// Reads a string-valued map property (headers/extra); a missing property
+// yields an empty map.
 std::map<std::string, std::string> JsInitialize::ParseMap(
     napi_env env, napi_value jsConfig, const std::string &propertyName)
 {
@@ -446,6 +480,9 @@ std::map<std::string, std::string> JsInitialize::ParseMap(
     return result;
 }
 
+// url: length cap 8192; must start with http(s):// — and with https://
+// only when the app's network security config forbids cleartext for this
+// host.
 bool JsInitialize::ParseUrl(napi_env env, napi_value jsConfig, std::string &url, std::string &errInfo)
 {
     url = NapiUtils::Convert2String(env, jsConfig, "url");
@@ -474,6 +511,9 @@ bool JsInitialize::ParseUrl(napi_env env, napi_value jsConfig, std::string &url,
     return true;
 }
 
+// Fills certsPath with the app's network security config trust anchors
+// for the url's host; plain-http urls skip the lookup. (Re-validates the
+// url's length and scheme before use.)
 bool JsInitialize::ParseCertsPath(
     napi_env env, napi_value jsConfig, std::vector<std::string> &certsPath, std::string &errInfo)
 {
@@ -521,6 +561,8 @@ bool JsInitialize::ParseCertsPath(
     return true;
 }
 
+// title: defaults to "upload"/"download" when empty; API10 caps it at 256
+// bytes.
 bool JsInitialize::ParseTitle(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     config.title = NapiUtils::Convert2String(env, jsConfig, "title");
@@ -534,6 +576,8 @@ bool JsInitialize::ParseTitle(napi_env env, napi_value jsConfig, Config &config,
     return true;
 }
 
+// proxy: optional (length cap 512); when present it must match
+// http://<address or domain>:<1-5 digit port>.
 bool JsInitialize::ParseProxy(napi_env env, napi_value jsConfig, std::string &proxy, std::string &errInfo)
 {
     proxy = NapiUtils::Convert2String(env, jsConfig, "proxy");
@@ -555,6 +599,8 @@ bool JsInitialize::ParseProxy(napi_env env, napi_value jsConfig, std::string &pr
     return true;
 }
 
+// Fills certificatePins with the app's pin-set for the url's host;
+// open-mode hosts skip pinning entirely.
 void JsInitialize::ParseCertificatePins(napi_env env, std::string &url, std::string &certificatePins)
 {
     auto hostname = GetHostnameFromURL(url);
@@ -569,6 +615,9 @@ void JsInitialize::ParseCertificatePins(napi_env env, std::string &url, std::str
     }
 }
 
+// method: defaults by version and action (API10: PUT for upload / GET for
+// download; earlier versions: POST); an explicit value is honored only
+// when it is an allowed verb for the action.
 void JsInitialize::ParseMethod(napi_env env, napi_value jsConfig, Config &config)
 {
     if (config.version == Version::API10) {
@@ -588,6 +637,8 @@ void JsInitialize::ParseMethod(napi_env env, napi_value jsConfig, Config &config
     }
 }
 
+// data: uploads take an array of {name, value} items converted into
+// forms/files (see GetFormItems); downloads take a plain string.
 bool JsInitialize::ParseData(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     napi_value value = NapiUtils::GetNamedProperty(env, jsConfig, "data");
@@ -618,6 +669,8 @@ bool JsInitialize::ParseName(napi_env env, napi_value jsVal, std::string &name)
     return true;
 }
 
+// Converts one {name, value} item: a string value becomes a form field,
+// an object value a single file, an array value a list of files.
 bool JsInitialize::GetFormItems(
     napi_env env, napi_value jsVal, std::vector<FormItem> &forms, std::vector<FileSpec> &files)
 {
@@ -660,6 +713,8 @@ bool JsInitialize::GetFormItems(
     return true;
 }
 
+// Parses the upload data array; requires at least one file overall (a
+// forms-only upload is rejected).
 bool JsInitialize::Convert2FormItems(
     napi_env env, napi_value jsValue, std::vector<FormItem> &forms, std::vector<FileSpec> &files, std::string &errInfo)
 {
@@ -730,6 +785,9 @@ bool JsInitialize::Convert2FileSpecs(
 }
 
 // Assert `in` is trimmed.
+// out = the substring of in after the last occurrence of str (used by
+// ParseSaveas and the V9 download default to derive the default file name
+// from the url path).
 bool JsInitialize::InterceptData(const std::string &str, const std::string &in, std::string &out)
 {
     std::size_t position = in.find_last_of(str);
@@ -741,6 +799,8 @@ bool JsInitialize::InterceptData(const std::string &str, const std::string &in, 
     return true;
 }
 
+// Converts one file descriptor {path, filename?, contentType?}: path is
+// required (trimmed); contentType presence is tracked in hasContentType.
 bool JsInitialize::Convert2FileSpec(napi_env env, napi_value jsValue, const std::string &name, FileSpec &file)
 {
     REQUEST_HILOGD("Convert2FileSpec in");
@@ -758,6 +818,7 @@ bool JsInitialize::Convert2FileSpec(napi_env env, napi_value jsValue, const std:
     return true;
 }
 
+// redirect: absent → true.
 void JsInitialize::ParseRedirect(napi_env env, napi_value jsConfig, bool &redirect)
 {
     if (!NapiUtils::HasNamedProperty(env, jsConfig, "redirect")) {
@@ -767,6 +828,7 @@ void JsInitialize::ParseRedirect(napi_env env, napi_value jsConfig, bool &redire
     }
 }
 
+// retry: absent → true.
 void JsInitialize::ParseRetry(napi_env env, napi_value jsConfig, bool &retry)
 {
     if (!NapiUtils::HasNamedProperty(env, jsConfig, "retry")) {
@@ -776,6 +838,9 @@ void JsInitialize::ParseRetry(napi_env env, napi_value jsConfig, bool &retry)
     }
 }
 
+// API8/9 config entry: action inferred from the options object
+// (GetRequestAction), headers map, url, then the upload/download-specific
+// parsers; a title failure is tolerated (the field stays defaulted).
 bool JsInitialize::ParseConfigV9(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     REQUEST_HILOGD("ParseConfigV9 in");
@@ -793,6 +858,8 @@ bool JsInitialize::ParseConfigV9(napi_env env, napi_value jsConfig, Config &conf
     return true;
 }
 
+// Upload-specific fields (API8/9): method, files (required, non-empty),
+// data (request forms), index, begins/ends.
 bool JsInitialize::ParseUploadConfig(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     REQUEST_HILOGD("ParseUploadConfig in");
@@ -825,6 +892,9 @@ bool JsInitialize::ParseUploadConfig(napi_env env, napi_value jsConfig, Config &
     return true;
 }
 
+// Download-specific fields (API8/9): metered/roaming flags, description,
+// networkType → Network, filePath → saveas (defaulting to the file name
+// taken from the url when absent), background; method is forced to GET.
 bool JsInitialize::ParseDownloadConfig(napi_env env, napi_value jsConfig, Config &config, std::string &errInfo)
 {
     REQUEST_HILOGD("ParseDownloadConfig in");
@@ -848,6 +918,9 @@ bool JsInitialize::ParseDownloadConfig(napi_env env, napi_value jsConfig, Config
     return true;
 }
 
+// API10 scalar/flag fields: overwrite, metered, gauge, precise, priority,
+// begins/ends, mode, headers, extras, multipart; a BACKGROUND mode implies
+// background.
 void JsInitialize::SetParseConfig(napi_env env, napi_value jsConfig, Config &config)
 {
     config.overwrite = NapiUtils::Convert2Boolean(env, jsConfig, "overwrite");

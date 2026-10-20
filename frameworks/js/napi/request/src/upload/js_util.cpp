@@ -35,6 +35,8 @@ static const std::map<ExceptionErrorCode, std::string> ErrorCodeToMsg{
     { E_OTHER, E_OTHER_INFO },
 };
 
+// Two-pass read: the probe call (NULL buffer) returns the exact string
+// length, so MAX_LEN only bounds the retry buffer after a probe failure.
 std::string JSUtil::Convert2String(napi_env env, napi_value jsString)
 {
     size_t maxLen = JSUtil::MAX_LEN;
@@ -207,6 +209,9 @@ bool JSUtil::ToUploadOption(napi_env env, napi_value jsConfig, UploadConfig &con
     return true;
 }
 
+// TLS defaults are injected when the option carries no header object;
+// when one is present only X-Cipher-List is ensured — X-TLS-Version is
+// not (curl_adp falls back to its own default).
 bool JSUtil::ParseHeader(napi_env env, napi_value configValue, std::map<std::string, std::string> &header)
 {
     if (!NapiUtils::HasNamedProperty(env, configValue, "header")) {
@@ -277,6 +282,8 @@ bool JSUtil::Convert2FileL5(napi_env env, napi_value jsFile, Upload::File &file)
     return true;
 }
 
+// One handle scope per element; elements that fail to parse are
+// skipped rather than failing the whole array.
 std::vector<Upload::File> JSUtil::Convert2FileVector(napi_env env, napi_value jsFiles, const std::string &version)
 {
     bool isArray = false;

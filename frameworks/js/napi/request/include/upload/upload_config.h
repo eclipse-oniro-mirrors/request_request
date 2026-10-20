@@ -23,6 +23,9 @@
 #include "curl/curl.h"
 
 namespace OHOS::Request::Upload {
+// One file source parsed from the old upload option's "files" array:
+// filename (local file path / display name of the form part), name (form
+// field name), uri (source URI, e.g. internal://cache/) and type (MIME).
 struct File {
     std::string filename;
     std::string name;
@@ -30,17 +33,26 @@ struct File {
     std::string type;
 };
 
+// One extra form field parsed from the option's "data" array.
 struct RequestData {
     std::string name;
     std::string value;
 };
 
+// Response payload of one upload as delivered to the success callback:
+// HTTP status code, body and the accumulated response header text.
 struct UploadResponse {
     int32_t code;
     std::string data;
     std::string headers;
 };
 
+// Fully parsed config of one old-style upload task. The three callbacks
+// are std::function wrappers over JS functions pinned by the NAPI layer
+// and must only run on the JS thread. method selects the wire form: PUT
+// uploads a raw body (CURLOPT_UPLOAD), anything else a multipart/form-data
+// POST. protocolVersion tags the API era ("API3") and comes from the
+// caller, not the JS option.
 struct UploadConfig {
     std::string url;
     std::map<std::string, std::string> header;
@@ -53,6 +65,15 @@ struct UploadConfig {
     std::string protocolVersion;
 };
 class CUrlAdp;
+// Per-file runtime state of one sequential upload step (CUrlAdp::DoUpload
+// copies each entry into its working mfileData_ before transfer):
+// fp — opened source file; adp — back-pointer that keeps the CUrlAdp
+// alive for the duration of the curl callbacks; upsize/totalsize —
+// uploaded and total bytes (upsize is maintained by ProgressCallback);
+// list — this request's curl_slist of extra headers, built by SetHeadData
+// and freed by DoUpload after each file; responseHead/headSendFlag/
+// httpCode — response header accumulation state driven by
+// HeaderCallback; result — the file's UploadErrorCode.
 struct FileData {
     FILE *fp;
     std::string filename;

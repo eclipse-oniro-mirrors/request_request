@@ -23,11 +23,16 @@
 #include "data_ability_helper.h"
 
 namespace OHOS::Request::Upload {
+// Abstraction over the two platform operations the old upload's file
+// fetch needs: opening a file behind a dataability:// URI and resolving
+// the internal (cache) directory.
 class IFileAdapter {
 public:
     virtual ~IFileAdapter(){};
+    /// Opens the data ability file read-only; returns its fd or -1.
     virtual int32_t DataAbilityOpenFile(
         const std::string &fileUri, std::shared_ptr<OHOS::AbilityRuntime::Context> &context) = 0;
+    /// The app's cache directory (root of internal://cache/ URIs).
     virtual std::string InternalGetFilePath(std::shared_ptr<OHOS::AbilityRuntime::Context> &context) = 0;
 };
 } // namespace OHOS::Request::Upload

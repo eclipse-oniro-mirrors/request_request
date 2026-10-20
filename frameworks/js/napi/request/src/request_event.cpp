@@ -25,6 +25,9 @@ namespace OHOS::Request {
 constexpr const std::int32_t DECIMALISM = 10;
 // Minimum accepted value for maxSpeed: 16 KB/s (16384 bytes per second).
 constexpr const int64_t MIN_SPEED_LIMIT = 16 * 1024;
+// JS event names. The V9 table uses complete/fail/headerReceive, the V10
+// table completed/failed/response/faultOccur/wait/resume; progress/pause/
+// remove are shared by both.
 static constexpr const char *EVENT_COMPLETED = "completed";
 static constexpr const char *EVENT_FAILED = "failed";
 static constexpr const char *EVENT_PAUSE = "pause";
@@ -38,6 +41,8 @@ static constexpr const char *EVENT_RESPONSE = "response";
 static constexpr const char *EVENT_FAULT_OCCUR = "faultOccur";
 static constexpr const char *EVENT_WAIT = "wait";
 
+// API8/9 event table: progress, pause, remove, headerReceive, complete,
+// fail.
 std::map<std::string, SubscribeType> RequestEvent::supportEventsV9_ = {
     { EVENT_COMPLETE, SubscribeType::COMPLETED },
     { EVENT_PAUSE, SubscribeType::PAUSE },
@@ -47,6 +52,8 @@ std::map<std::string, SubscribeType> RequestEvent::supportEventsV9_ = {
     { EVENT_FAIL, SubscribeType::FAILED },
 };
 
+// API10 (request.agent) event table: progress, completed, failed, pause,
+// resume, remove, response, faultOccur, wait.
 std::map<std::string, SubscribeType> RequestEvent::supportEventsV10_ = {
     { EVENT_PROGRESS, SubscribeType::PROGRESS },
     { EVENT_COMPLETED, SubscribeType::COMPLETED },
@@ -59,6 +66,7 @@ std::map<std::string, SubscribeType> RequestEvent::supportEventsV10_ = {
     { EVENT_WAIT, SubscribeType::WAIT },
 };
 
+// Method name → worker-stage executor of the AsyncCall lifecycle methods.
 std::map<std::string, RequestEvent::Event> RequestEvent::requestEvent_ = {
     { FUNCTION_PAUSE, RequestEvent::PauseExec },
     { FUNCTION_QUERY, RequestEvent::QueryExec },
@@ -70,6 +78,8 @@ std::map<std::string, RequestEvent::Event> RequestEvent::requestEvent_ = {
     { FUNCTION_SET_MAX_SPEED, RequestEvent::SetMaxSpeedExec },
 };
 
+// Method name → which ExecContext member is resolved to JS (BOOL_RES /
+// STR_RES / INFO_RES).
 std::map<std::string, uint32_t> RequestEvent::resMap_ = {
     { FUNCTION_PAUSE, BOOL_RES },
     { FUNCTION_QUERY, INFO_RES },
@@ -81,6 +91,8 @@ std::map<std::string, uint32_t> RequestEvent::resMap_ = {
     { FUNCTION_SET_MAX_SPEED, BOOL_RES },
 };
 
+// Internal State → legacy SESSION_* DownloadStatus of the API9 query
+// result.
 std::map<State, DownloadStatus> RequestEvent::stateMap_ = {
     { State::INITIALIZED, SESSION_PENDING },
     { State::WAITING, SESSION_PAUSED },
@@ -92,6 +104,8 @@ std::map<State, DownloadStatus> RequestEvent::stateMap_ = {
     { State::FAILED, SESSION_FAILED },
 };
 
+// Reason → legacy ERROR_* DownloadErrorCode surfaced through the API9
+// fail event / DownloadInfo.failedReason.
 std::map<Reason, DownloadErrorCode> RequestEvent::failMap_ = {
     { REASON_OK, ERROR_FILE_ALREADY_EXISTS },
     { IO_ERROR, ERROR_FILE_ERROR },
@@ -138,6 +152,9 @@ napi_value RequestEvent::Stop(napi_env env, napi_callback_info info)
     return Exec(env, info, FUNCTION_STOP);
 }
 
+// setMaxSpeed(speed): a dedicated AsyncCall entry because its argument
+// parse needs the raw callback info; the value must be >= 16 KB/s
+// (MIN_SPEED_LIMIT) and not below the task's configured minSpeed.speed.
 napi_value RequestEvent::SetMaxSpeed(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -188,6 +205,11 @@ napi_value RequestEvent::SetMaxSpeed(napi_env env, napi_callback_info info)
     return asyncCall.Call(context, execType);
 }
 
+// on(type, callback): registers the callback on the task's listener for
+// that SubscribeType — response events on the task's single
+// JSResponseListener, everything else on a per-SubscribeType
+// JSNotifyDataListener created on first use. Synchronous; the error-code
+// shape of thrown errors follows the task's version.
 napi_value RequestEvent::On(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -234,6 +256,8 @@ napi_value RequestEvent::On(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+// off(type[, callback]): removes one callback, or every callback of the
+// event when the callback argument is omitted.
 napi_value RequestEvent::Off(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -285,6 +309,8 @@ napi_value RequestEvent::Off(napi_env env, napi_callback_info info)
     return nullptr;
 }
 
+// Maps the JS event name to a SubscribeType using the table matching the
+// task's API version; an unknown name yields BUTT.
 SubscribeType RequestEvent::StringToSubscribeType(const std::string &type, Version version)
 {
     if (version == Version::API10) {
@@ -299,6 +325,8 @@ SubscribeType RequestEvent::StringToSubscribeType(const std::string &type, Versi
     return SubscribeType::BUTT;
 }
 
+// Projects a TaskInfo onto the legacy NotifyData payload delivered to the
+// API9 progress callbacks.
 NotifyData RequestEvent::BuildNotifyData(const std::shared_ptr<TaskInfo> &taskInfo)
 {
     NotifyData notifyData{
@@ -311,6 +339,8 @@ NotifyData RequestEvent::BuildNotifyData(const std::shared_ptr<TaskInfo> &taskIn
     return notifyData;
 }
 
+// Validates the setMaxSpeed argument: a number >= MIN_SPEED_LIMIT and
+// >= the task's minSpeed.speed.
 ExceptionError RequestEvent::ParseSetMaxSpeedParameters(
     napi_env env, napi_value self, napi_callback_info info, int64_t minSpeed, int64_t &maxSpeed)
 {
@@ -351,6 +381,9 @@ ExceptionError RequestEvent::ParseSetMaxSpeedParameters(
     return err;
 }
 
+// Validates (type[, callback]) for on/off: unwraps the native task from
+// this, resolves the event name via the version-matched table, and
+// checks the callback (required for on, optional for off).
 ExceptionError RequestEvent::ParseOnOffParameters(
     napi_env env, napi_callback_info info, bool IsRequiredParam, JsParam &jsParam)
 {
@@ -404,6 +437,9 @@ ExceptionError RequestEvent::ParseOnOffParameters(
     return err;
 }
 
+// Shared AsyncCall wiring of the lifecycle methods: exec dispatches to
+// the requestEvent_ entry, output serializes the result member chosen by
+// resMap_.
 napi_value RequestEvent::Exec(napi_env env, napi_callback_info info, const std::string &execType)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -440,6 +476,8 @@ napi_value RequestEvent::Exec(napi_env env, napi_callback_info info, const std::
     return asyncCall.Call(context, execType);
 }
 
+// Unwraps the native task from the JS this and adopts its version (and
+// the error-code shape that follows from it).
 napi_status RequestEvent::ParseInputParameters(
     napi_env env, size_t argc, napi_value self, const std::shared_ptr<ExecContext> &context)
 {
@@ -452,6 +490,8 @@ napi_status RequestEvent::ParseInputParameters(
     return napi_ok;
 }
 
+// Serializes the ExecContext result member selected by the method's
+// entry in resMap_.
 napi_status RequestEvent::GetResult(
     napi_env env, const std::shared_ptr<ExecContext> &context, const std::string &execType, napi_value &result)
 {
@@ -471,6 +511,10 @@ napi_status RequestEvent::GetResult(
     return napi_generic_failure;
 }
 
+// start(): before contacting the server it re-grants the saveas ACL when
+// the downloaded file already exists but the grants were released
+// (e.g. after a failed task), and requires the task to still be in the
+// process map.
 int32_t RequestEvent::StartExec(const std::shared_ptr<ExecContext> &context)
 {
     REQUEST_HILOGD("RequestEvent::StartExec in");
@@ -525,6 +569,10 @@ int32_t RequestEvent::SetMaxSpeedExec(const std::shared_ptr<ExecContext> &contex
     return ret;
 }
 
+// pause() and the other API8/9 executors below share one compatibility
+// rule: for non-API10 tasks every error except E_PERMISSION is swallowed
+// and reported as success — API9 callers do not get promise rejections
+// for business failures, the fail event carries them instead.
 int32_t RequestEvent::PauseExec(const std::shared_ptr<ExecContext> &context)
 {
     int32_t ret = RequestManager::GetInstance()->Pause(context->task->GetTid(), context->version_);
@@ -537,6 +585,8 @@ int32_t RequestEvent::PauseExec(const std::shared_ptr<ExecContext> &context)
     return ret;
 }
 
+// getTaskInfo()/query(): fetches the task info and converts it into the
+// legacy DownloadInfo shape (GetDownloadInfo).
 int32_t RequestEvent::QueryExec(const std::shared_ptr<ExecContext> &context)
 {
     TaskInfo infoRes;
@@ -560,6 +610,10 @@ int32_t RequestEvent::QueryMimeTypeExec(const std::shared_ptr<ExecContext> &cont
     return ret;
 }
 
+// Converts the internal TaskInfo into the legacy DownloadInfo shape:
+// session status (stateMap_), failed/paused reason codes (failMap_),
+// downloadId = tid parsed as decimal, first file name/path, sizes[0] as
+// the total and processed as the downloaded byte count.
 void RequestEvent::GetDownloadInfo(const TaskInfo &infoRes, DownloadInfo &info)
 {
     info.downloadId = strtoul(infoRes.tid.c_str(), NULL, DECIMALISM);

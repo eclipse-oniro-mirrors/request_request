@@ -33,10 +33,14 @@
 #include "securec.h"
 
 namespace OHOS::Request::NapiUtils {
+// JS Number safe-integer limit; a uint64_t above it cannot round-trip
+// through a JS number.
 static constexpr int64_t JS_NUMBER_MAX_VALUE = (1LL << 53) - 1;
 static constexpr const char *NOT_SYSTEM_APP = "permission verification failed, application which is not a system "
                                               "application uses system API";
 
+// Preset message text per JS-visible error code, prepended by
+// CreateBusinessError to the caller-supplied message.
 static const std::map<ExceptionErrorCode, std::string> ErrorCodeToMsg{ { E_OK, E_OK_INFO },
     { E_PERMISSION, E_PERMISSION_INFO }, { E_PARAMETER_CHECK, E_PARAMETER_CHECK_INFO },
     { E_UNSUPPORTED, E_UNSUPPORTED_INFO }, { E_FILE_IO, E_FILE_IO_INFO }, { E_FILE_PATH, E_FILE_PATH_INFO },
@@ -277,6 +281,9 @@ napi_value Convert2JSValue(napi_env env, TaskInfo &taskInfo)
 {
     napi_value value = nullptr;
     napi_create_object(env, &value);
+    // withSystem (set by request.agent.query's output stage) switches the
+    // serialized shape: uid and bundle are added, url/data and the upload
+    // file list are cleared before serializing.
     if (taskInfo.withSystem) {
         napi_set_named_property(env, value, "uid", Convert2JSValue(env, taskInfo.uid));
         napi_set_named_property(env, value, "bundle", Convert2JSValue(env, taskInfo.bundle));

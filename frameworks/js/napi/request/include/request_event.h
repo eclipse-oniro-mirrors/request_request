@@ -28,6 +28,12 @@
 #include "request_common.h"
 
 namespace OHOS::Request {
+// JS methods of the Task instances: on/off plus the lifecycle controls
+// (start/pause/resume/stop/setMaxSpeed and the API8/9 aliases
+// suspend/delete/restore/getTaskInfo/getTaskMimeType/query/queryMimeType/
+// remove). Every entry resolves the native JsTask behind the JS this,
+// then forwards to the server via RequestManager; the lifecycle methods
+// are AsyncCall-based, on/off manage the task's event listeners.
 class RequestEvent final {
 public:
     RequestEvent() = default;
@@ -47,9 +53,13 @@ public:
     static napi_value Start(napi_env env, napi_callback_info info);
     static napi_value Stop(napi_env env, napi_callback_info info);
     static napi_value SetMaxSpeed(napi_env env, napi_callback_info info);
+    /// Reason → legacy DownloadErrorCode for the API9 'fail' event.
     static std::map<Reason, DownloadErrorCode> failMap_;
 
 private:
+    /// Arguments of one on/off call: event type name, its resolved
+    /// SubscribeType, the JS callback and this handles, and the native
+    /// task.
     struct JsParam {
         std::string type;
         SubscribeType subscribeType;
@@ -57,7 +67,11 @@ private:
         napi_value self;
         JsTask *task;
     };
+    // Output shape of a lifecycle method: boolean / string (mimeType) /
+    // DownloadInfo — selected per method via resMap_.
     enum { BOOL_RES, STR_RES, INFO_RES };
+    /// Lifecycle-call state: the task, the input scalar (maxSpeed) and the
+    /// result member chosen by the method's output shape.
     struct ExecContext : public AsyncCall::Context {
         JsTask *task = nullptr;
         bool boolRes = false;
@@ -67,10 +81,16 @@ private:
     };
 
     using Event = std::function<int32_t(const std::shared_ptr<ExecContext> &)>;
+    /// Event-name → SubscribeType per API version; on() consults the table
+    /// matching the task's version (the two tables must not be mixed —
+    /// they differ in event names and granularity).
     static std::map<std::string, SubscribeType> supportEventsV10_;
     static std::map<std::string, SubscribeType> supportEventsV9_;
+    /// Method name → worker-stage executor (requestEvent_).
     static std::map<std::string, Event> requestEvent_;
+    /// Method name → output shape (resMap_).
     static std::map<std::string, uint32_t> resMap_;
+    /// State → legacy DownloadStatus for DownloadInfo serialization.
     static std::map<State, DownloadStatus> stateMap_;
     static napi_value Exec(napi_env env, napi_callback_info info, const std::string &execType);
 

@@ -23,6 +23,12 @@
 
 namespace OHOS {
 namespace Request {
+// Runs when the app returns to the foreground. Flow:
+// 1. SA already up — nothing to recover.
+// 2. SA down and some live FOREGROUND-mode task exists — retry
+//    LoadRequestServer (foreground tasks cannot run without the SA).
+// 3. SA down but no foreground task left — this callback has no further
+//    purpose; unregister itself from the ApplicationContext.
 void AppStateCallback::OnAbilityForeground(const AbilityRuntime::AbilityLifecycleCallbackArgs &ability)
 {
     if (RequestManager::GetInstance()->IsSaReady()) {
@@ -44,12 +50,16 @@ void AppStateCallback::OnAbilityForeground(const AbilityRuntime::AbilityLifecycl
         }
     }
     if (hasForeground) {
+        // Retry loading the SA off-thread; foreground tasks cannot run
+        // without it.
         ffrt::submit([]() mutable { RequestManager::GetInstance()->LoadRequestServer(); });
         return;
     }
     if (!JsTask::register_) {
         return;
     }
+    // One-shot: reset the guard so a later RegisterForegroundResume can
+    // install a fresh callback, then drop this one.
     JsTask::register_ = false;
     auto context = AbilityRuntime::ApplicationContext::GetInstance();
     if (context == nullptr) {

@@ -67,6 +67,9 @@ void UploadTask::SetUploadProxy(std::shared_ptr<UploadTaskNapiV5> proxy)
     uploadProxy_ = proxy;
 }
 
+// Worker body: after the start delay, the upload itself, then — unless
+// removed — the API3 complete callback; the NAPI proxy is released
+// either way, ending its share of this task.
 void UploadTask::Run(std::shared_ptr<Upload::UploadTask> task)
 {
     UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "Run. In.");
@@ -91,6 +94,9 @@ void UploadTask::Run(std::shared_ptr<Upload::UploadTask> task)
     task->SetUploadProxy(nullptr);
 }
 
+// Opens each config file (ObtainFile by URI scheme); the display
+// filename defaults to the last path segment of the uri with trailing
+// spaces stripped.
 uint32_t UploadTask::InitFileArray()
 {
     UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "InitFileArray. In.");
@@ -150,6 +156,8 @@ uint32_t UploadTask::StartUploadFile()
     return curlAdp_->DoUpload(shared_from_this());
 }
 
+// A removed task keeps its last state; otherwise the adapter's overall
+// result picks SUCCESS/FAILURE before the files are closed.
 void UploadTask::OnRun()
 {
     UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "OnRun. In.");
