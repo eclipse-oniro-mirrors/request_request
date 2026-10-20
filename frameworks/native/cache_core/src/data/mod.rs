@@ -32,4 +32,8 @@ pub use file::{
 pub use ram::RamCache;
 pub(crate) use space::SpaceManager;
 
+/// Per-entry cache size cap (20 MiB) applied to both RAM and file cache
+/// entries. Numerically equal to the default total RAM cache capacity
+/// (`DEFAULT_RAM_CACHE_SIZE`), but a different limit: this bounds a single
+/// entry, that bounds the whole RAM cache.
 pub(crate) const MAX_CACHE_SIZE: u64 = 20971520;

@@ -11,11 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Cache download functionality for animation resources.
+//! ANI (ArkTS Native Interface) binding for the cache download service.
 //!
-//! This module provides functions for downloading, canceling, and configuring
-//! cache settings for animation resources. It serves as a bridge between the
-//! ETS interface and the native cache download service.
+//! This module implements the `@ohos.request.cacheDownload` API on top of the
+//! native cache download service: downloading (preloading) resources into the
+//! two-level cache, canceling tasks, querying download statistics, and
+//! configuring cache sizes and global retry/timeout options. It also performs
+//! the permission checks required by the API.
 
 use std::sync::OnceLock;
 
@@ -83,7 +85,7 @@ fn has_get_network_info_permission() -> bool {
 /// // Basic download
 /// let result: Result<(), BusinessError> = download(
 ///     "https://example.com/resource.mp4".to_string(),
-///     CacheDownloadOptions { header: None },
+///     CacheDownloadOptions { headers: None },
 /// );
 ///
 /// // Download with headers
@@ -92,7 +94,7 @@ fn has_get_network_info_permission() -> bool {
 /// let result: Result<(), BusinessError> = download(
 ///     "https://example.com/resource.mp4".to_string(),
 ///     CacheDownloadOptions {
-///         header: Some(headers),
+///         headers: Some(headers),
 ///     },
 /// );
 /// ```

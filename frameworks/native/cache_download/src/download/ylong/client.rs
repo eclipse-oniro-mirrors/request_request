@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! HTTP client configuration for the Ylong downloader implementation.
-//! 
+//!
 //! This module provides a singleton HTTP client instance with optimized configuration
 //! for cache download operations, including timeout settings, TLS configuration, and
 //! redirect handling.
@@ -38,7 +38,7 @@ const SECONDS_IN_ONE_WEEK: u64 = 7 * 24 * 60 * 60;
 /// - 60-second connection timeout
 /// - One-week request timeout for long-running downloads
 /// - TLS 1.2 or higher
-/// - Unlimited redirects
+/// - Redirects capped at usize::MAX (effectively unlimited)
 /// - Built-in root certificates for TLS validation
 ///
 /// # Returns
@@ -58,7 +58,7 @@ pub(crate) fn client() -> &'static Client {
             .request_timeout(Timeout::from_secs(SECONDS_IN_ONE_WEEK))
             // Enforce minimum TLS version for security
             .min_tls_version(TlsVersion::TLS_1_2)
-            // Allow unlimited redirects for maximum compatibility
+            // Allow effectively unlimited redirects (capped at usize::MAX)
             .redirect(Redirect::limited(usize::MAX))
             // Use system's built-in root certificates for TLS validation
             .tls_built_in_root_certs(true);

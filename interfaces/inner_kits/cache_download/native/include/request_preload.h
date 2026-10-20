@@ -192,19 +192,19 @@ public:
 
     ~CppDownloadInfo();
 
-    /// DNS resolution duration (seconds)
+    /// DNS resolution duration (milliseconds)
     double dns_time() const;
-    /// TCP connection establishment duration (seconds)
+    /// TCP connection establishment duration (milliseconds)
     double connect_time() const;
-    /// TLS/SSL handshake duration (seconds)
+    /// TLS/SSL handshake duration (milliseconds)
     double tls_time() const;
-    /// Duration from connection ready to first request sent (seconds)
+    /// Duration from connection ready to first request sent (milliseconds)
     double first_send_time() const;
-    /// Duration from request sent to first byte received (seconds)
+    /// Duration from request sent to first byte received (milliseconds)
     double first_recv_time() const;
-    /// Cumulative duration of handling HTTP redirects (seconds)
+    /// Cumulative duration of handling HTTP redirects (milliseconds)
     double redirect_time() const;
-    /// Total duration of the whole download flow (seconds)
+    /// Total duration of the whole download flow (milliseconds)
     double total_time() const;
     /// Resource size in bytes
     int64_t resource_size() const;

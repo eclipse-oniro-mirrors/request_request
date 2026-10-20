@@ -20,7 +20,14 @@
 #include "inotify_event_listener.h"
 
 namespace OHOS::Request {
+// cxx bridge entry points used by cache_core's Rust side to drive the C++
+// inotify monitor. Rust cannot construct or call C++ classes directly, so it
+// goes through these two functions.
+
+// Creates a DirectoryMonitor watching target with the given Rust rebuild
+// callback; the result is handed back to Rust as a UniquePtr.
 std::unique_ptr<DirectoryMonitor> NewDirectoryMonitor(const std::string &target, rust::Box<DirRebuilder> callback);
+// Starts monitor's watch thread.
 void StartObserve(DirectoryMonitor &monitor);
 } // namespace OHOS::Request
 

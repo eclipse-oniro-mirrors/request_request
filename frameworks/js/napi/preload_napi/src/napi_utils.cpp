@@ -25,6 +25,8 @@
 #include "napi/native_common.h"
 
 namespace OHOS::Request {
+// Builds a JS Error object of shape { code, message } for BusinessError
+// reporting. (Not declared in napi_utils.h; used by ThrowError in this file.)
 napi_value CreateBusinessError(napi_env env, int32_t errorCode, const std::string &errorMessage)
 {
     napi_value error = nullptr;
@@ -101,6 +103,8 @@ std::vector<std::string> GetPropertyNames(napi_env env, napi_value object)
     return ret;
 }
 
+// Returns whether object has the named property. (Not declared in
+// napi_utils.h; used by GetPropertyValue in this file.)
 bool HasNamedProperty(napi_env env, napi_value object, const std::string &propertyName)
 {
     bool hasProperty = false;

@@ -111,6 +111,9 @@ impl CacheDownloadError {
 
     /// Returns the error kind as an integer code for FFI compatibility.
     ///
+    /// The value is the enum discriminant and must stay in sync with the C++
+    /// `ErrorKind` enum (see the note on `ErrorKind`).
+    ///
     /// # Returns
     /// An integer representation of the error kind.
     pub fn ffi_kind(&self) -> i32 {
@@ -127,6 +130,11 @@ impl CacheDownloadError {
 }
 
 /// Categorizes the type of error that occurred.
+///
+/// The declaration order is a cross-language contract: `ffi_kind()` casts the
+/// variant to its discriminant and hands the integer to C++, where it must
+/// match the `ErrorKind` enum in `request_preload.h` one-to-one. Do not
+/// reorder or insert variants on either side independently.
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
     /// HTTP-related errors, typically from network operations

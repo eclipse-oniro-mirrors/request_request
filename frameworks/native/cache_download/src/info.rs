@@ -28,58 +28,58 @@ pub struct RustDownloadInfo {
 }
 
 impl RustDownloadInfo {
-    /// Returns the DNS resolution time in seconds.
+    /// Returns the DNS resolution time in milliseconds.
     ///
     /// # Returns
-    /// The time taken to resolve the domain name, in seconds.
+    /// The time taken to resolve the domain name, in milliseconds.
     pub fn dns_time(&self) -> f64 {
         self.info.dns_time()
     }
 
-    /// Returns the connection establishment time in seconds.
+    /// Returns the connection establishment time in milliseconds.
     ///
     /// # Returns
-    /// The time taken to establish the TCP connection, in seconds.
+    /// The time taken to establish the TCP connection, in milliseconds.
     pub fn connect_time(&self) -> f64 {
         self.info.connect_time()
     }
 
-    /// Returns the TLS handshake time in seconds.
+    /// Returns the TLS handshake time in milliseconds.
     ///
     /// # Returns
-    /// The time taken to complete the TLS handshake, in seconds.
+    /// The time taken to complete the TLS handshake, in milliseconds.
     pub fn tls_time(&self) -> f64 {
         self.info.tls_time()
     }
 
-    /// Returns the time to first byte sent in seconds.
+    /// Returns the time to first byte sent in milliseconds.
     ///
     /// # Returns
-    /// The time taken to send the first byte of the request, in seconds.
+    /// The time taken to send the first byte of the request, in milliseconds.
     pub fn first_send_time(&self) -> f64 {
         self.info.first_send_time()
     }
 
-    /// Returns the time to first byte received in seconds.
+    /// Returns the time to first byte received in milliseconds.
     ///
     /// # Returns
-    /// The time taken to receive the first byte of the response, in seconds.
+    /// The time taken to receive the first byte of the response, in milliseconds.
     pub fn first_recv_time(&self) -> f64 {
         self.info.first_recv_time()
     }
 
-    /// Returns the time spent on redirects in seconds.
+    /// Returns the time spent on redirects in milliseconds.
     ///
     /// # Returns
-    /// The total time spent processing redirects, in seconds.
+    /// The total time spent processing redirects, in milliseconds.
     pub fn redirect_time(&self) -> f64 {
         self.info.redirect_time()
     }
 
-    /// Returns the total download time in seconds.
+    /// Returns the total download time in milliseconds.
     ///
     /// # Returns
-    /// The total time from request initiation to completion, in seconds.
+    /// The total time from request initiation to completion, in milliseconds.
     pub fn total_time(&self) -> f64 {
         self.info.total_time()
     }

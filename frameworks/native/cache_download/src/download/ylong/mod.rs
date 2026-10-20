@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Ylong HTTP client-based download implementation.
-//! 
+//!
 //! This module provides a download implementation using the Ylong HTTP client, including:
 //! - A download task runner
 //! - Progress reporting and cancellation mechanisms
@@ -100,7 +100,7 @@ impl<'a> DownloadOperator for Operator<'a> {
         let me = self.get_mut();
         me.callback
             .common_progress(total.unwrap_or_default(), downloaded, 0, 0);
-        
+
         // Check if download has been requested to abort
         if me.abort_flag.load(Ordering::Acquire) {
             Poll::Ready(Err(HttpClientError::user_aborted()))
@@ -139,14 +139,14 @@ impl DownloadTask {
                 return Arc::new(CancelHandle::new(Arc::new(AtomicBool::new(false))));
             }
         };
-        
+
         // Signal that the download is starting
         callback.set_running();
-        
+
         // Create a cancellation flag and handle
         let flag = Arc::new(AtomicBool::new(false));
         let handle = Arc::new(CancelHandle::new(flag.clone()));
-        
+
         // Process request headers if provided
         let mut headers = None;
         if let Some(h) = request.headers {
@@ -156,7 +156,7 @@ impl DownloadTask {
                     .collect(),
             );
         }
-        
+
         // Spawn an asynchronous task to perform the download
         ylong_runtime::spawn(async move {
             if let Err(e) = download(url, headers, &mut callback, flag).await {
@@ -168,7 +168,7 @@ impl DownloadTask {
                 }
             }
         });
-        
+
         handle
     }
 }
@@ -202,7 +202,7 @@ pub async fn download(
             request = request.append_header(k.as_str(), v.as_str());
         }
     }
-    
+
     // Set empty body for GET request
     let request = request.body(Body::empty())?;
 
@@ -220,7 +220,7 @@ pub async fn download(
             .map(|(key, value)| (key.to_string(), value.to_string().unwrap()))
             .collect(),
     };
-    
+
     // Build and run the downloader
     let mut downloader = Downloader::builder()
         .body(response)
