@@ -32,16 +32,23 @@
 
 namespace OHOS::Request {
 
+// Parameter-validation message and length caps for the customized
+// notification (title/text).
 const std::string PARAMETER_ERROR_INFO = "wrong parameters";
 const std::size_t MAX_TITLE_LENGTH = 1024;
 const std::size_t MAX_TEXT_LENGTH = 3072;
 
+// createGroup call state; gid is filled by the server during exec.
 struct CreateContext : public AsyncCall::Context {
     std::string gid;
     bool gauge = false;
     Notification notification;
 };
 
+// Field-by-field parsing of the optional notification sub-object.
+// Strictness differs per field: title/text/disable/hideStopButton silently
+// ignore a missing or wrong-typed value (only over-length strings throw);
+// visibility and wantAgent throw E_PARAMETER_CHECK on invalid values.
 napi_status ValidateAndSetTitle(CreateContext *context, napi_value customized)
 {
     if (NapiUtils::HasNamedProperty(context->env_, customized, "title")) {
@@ -98,6 +105,9 @@ napi_status ValidateAndSetHideStopButton(CreateContext *context, napi_value cust
     return napi_ok;
 }
 
+// visibility must be a submask of Visibility::ANY other than NONE; an
+// explicit undefined falls back to COMPLETION for non-gauge groups (gauge
+// groups keep the COMPLETION|PROGRESS default set in createInput).
 napi_status ValidateAndSetVisibility(CreateContext *context, napi_value customized)
 {
     if (NapiUtils::HasNamedProperty(context->env_, customized, "visibility")) {
@@ -142,6 +152,8 @@ napi_status ValidateAndSetWantAgent(CreateContext *context, napi_value customize
     return napi_ok;
 }
 
+// Parses the notification sub-object if the value is an object; any
+// other value is ignored (all notification fields are optional).
 napi_status createNotificationParse(CreateContext *context, napi_value customized)
 {
     if (context == nullptr || context->env_ == nullptr) {
@@ -185,6 +197,10 @@ napi_status createNotificationParse(CreateContext *context, napi_value customize
     return napi_ok;
 }
 
+// createGroup input: requires one options object. gauge=true defaults the
+// visibility to COMPLETION|PROGRESS (progress bar in the notification),
+// otherwise COMPLETION; an explicit notification sub-object overrides the
+// defaults where present.
 napi_status createInput(CreateContext *context, size_t argc, napi_value *argv, napi_value self)
 {
     if (argc < 1) {
@@ -221,6 +237,9 @@ napi_status createInput(CreateContext *context, size_t argc, napi_value *argv, n
     return createNotificationParse(context, customized_notification);
 }
 
+// request.agent.createGroup: the server generates the group id during
+// exec (gid is an out-parameter of CreateGroup) and the output stage
+// returns it to JS.
 napi_value createGroup(napi_env env, napi_callback_info info)
 {
     auto context = std::make_shared<CreateContext>();
@@ -239,11 +258,15 @@ napi_value createGroup(napi_env env, napi_callback_info info)
     return asyncCall.Call(context, "createGroup");
 }
 
+// attachGroup call state: group id plus the task ids to bind.
 struct AttachContext : public AsyncCall::Context {
     std::string gid;
     std::vector<std::string> tids;
 };
 
+// request.agent.attachGroup(gid, tids): exactly two arguments; non-string
+// entries in the tid array are skipped. Business errors reject the promise
+// with their error code (withErrCode_).
 napi_value attachGroup(napi_env env, napi_callback_info info)
 {
     auto context = std::make_shared<AttachContext>();
@@ -291,10 +314,13 @@ napi_value attachGroup(napi_env env, napi_callback_info info)
     return asyncCall.Call(context, "createGroup");
 }
 
+// deleteGroup call state: just the group id.
 struct DeleteContext : public AsyncCall::Context {
     std::string gid;
 };
 
+// request.agent.deleteGroup(gid): business errors reject the promise with
+// their error code (withErrCode_).
 napi_value deleteGroup(napi_env env, napi_callback_info info)
 {
     auto context = std::make_shared<DeleteContext>();

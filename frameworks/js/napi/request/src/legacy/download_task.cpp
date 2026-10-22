@@ -26,6 +26,7 @@
 
 namespace OHOS::Request::Legacy {
 bool DownloadTask::isCurlGlobalInited_ = false;
+// Low-speed abort thresholds: give up after 60 s below 30 bytes/s.
 const uint32_t DEFAULT_READ_TIMEOUT = 60;
 const uint32_t DEFAULT_LOW_SPEED_LIMIT = 30;
 constexpr uint32_t RETRY_TIME = 10;
@@ -138,6 +139,8 @@ bool DownloadTask::GetFileSize(uint32_t &result)
     return hasFileSize_;
 }
 
+// TLS certificate verification is disabled on this legacy path (both
+// host and peer).
 bool DownloadTask::SetOption(CURL *handle, curl_slist *&headers)
 {
     filp_ = OpenDownloadFile();

@@ -25,6 +25,11 @@
 
 namespace OHOS::Request {
 
+// Native constructor shared by all Task classes (API8-10 and the getTask
+// reconstruction): peels the (context, config) arguments — API8 passes the
+// config alone — parses them into a new JsTask and wraps it into the JS
+// instance being constructed; the napi finalize callback drops the task's
+// listeners and the object itself when JS garbage-collects the instance.
 napi_value JsInitialize::Initialize(napi_env env, napi_callback_info info, Version version, bool firstInit)
 {
     REQUEST_HILOGD("constructor request task!");
@@ -77,6 +82,9 @@ napi_value JsInitialize::Initialize(napi_env env, napi_callback_info info, Versi
     return self;
 }
 
+// Validates the constructor arguments: the ability context (argument
+// position depends on the version), the application info (bundleType) and
+// the config object, then the file paths (CheckFilePath).
 ExceptionError JsInitialize::InitParam(
     napi_env env, napi_value *argv, std::shared_ptr<OHOS::AbilityRuntime::Context> &context, Config &config)
 {
@@ -110,6 +118,8 @@ ExceptionError JsInitialize::InitParam(
     return err;
 }
 
+// Resolves the ability context: a stage-model context value directly,
+// otherwise the FA-model current ability's context.
 napi_status JsInitialize::GetContext(
     napi_env env, napi_value value, std::shared_ptr<OHOS::AbilityRuntime::Context> &context)
 {
@@ -132,6 +142,8 @@ napi_status JsInitialize::GetContext(
     return napi_ok;
 }
 
+// Fills baseDir with the application-level base directory; fails when the
+// application context or its base dir is unavailable.
 bool JsInitialize::GetAppBaseDir(std::string &baseDir)
 {
     auto context = AbilityRuntime::Context::GetApplicationContext();
@@ -149,6 +161,7 @@ bool JsInitialize::GetAppBaseDir(std::string &baseDir)
     return true;
 }
 
+// Whether the JS value is a stage-model context.
 bool JsInitialize::IsStageMode(napi_env env, napi_value value)
 {
     bool stageMode = true;

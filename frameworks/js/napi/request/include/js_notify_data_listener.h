@@ -23,6 +23,12 @@
 
 namespace OHOS::Request {
 
+// Listener for every non-response event of one task — one instance per
+// (task, SubscribeType). The three On*Receive entries run on the UDS
+// receive thread and never call napi there: each marshals its payload to
+// the JS thread via napi_send_event, and only converts/dispatches inside
+// that event (handle scope → convert → callback). Terminal events also
+// drive the task cleanup (DoJSTask/CheckRemoveJSTask).
 class JSNotifyDataListener
     : public INotifyDataListener
     , public ListenerList
@@ -46,11 +52,15 @@ private:
     void DoJSTask(const std::shared_ptr<NotifyData> &notifyData);
 };
 
+/// Heap payload carried across the napi_send_event hop of a notify-data
+/// event; owned by the event lambda and deleted on the JS thread (or by
+/// the sender when the hop itself fails).
 struct NotifyDataPtr {
     std::shared_ptr<NotifyData> notifyData = nullptr;
     std::shared_ptr<JSNotifyDataListener> listener = nullptr;
 };
 
+/// Same for the faultOccur hop (reason + tid).
 struct ReasonDataPtr {
     std::shared_ptr<JSNotifyDataListener> listener = nullptr;
     std::shared_ptr<Reason> reason = nullptr;

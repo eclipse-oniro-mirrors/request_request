@@ -20,6 +20,12 @@
 
 namespace OHOS {
 namespace Request {
+// App lifecycle callback used to recover from a missing download_server SA:
+// when the app returns to the foreground it retries loading the SA if any
+// foreground-mode task is waiting, and unregisters itself once no such task
+// exists. Registered at most once per process by
+// JsTask::RegisterForegroundResume (guarded by JsTask::register_); every
+// lifecycle method except OnAbilityForeground is an intentional no-op.
 class AppStateCallback
     : public OHOS::AbilityRuntime::AbilityLifecycleCallback, public std::enable_shared_from_this<AppStateCallback> {
 public:
@@ -53,6 +59,9 @@ public:
     {
     }
 
+    /// SA-recovery hook (flow in the .cpp): if the SA is still down,
+    /// reloads it while a foreground-mode task is waiting, or unregisters
+    /// this callback when none is.
     void OnAbilityForeground(const AbilityRuntime::AbilityLifecycleCallbackArgs &ability) override;
 
     void OnAbilityBackground(const AbilityRuntime::AbilityLifecycleCallbackArgs &ability) override

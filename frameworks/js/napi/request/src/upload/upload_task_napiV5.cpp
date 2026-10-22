@@ -44,6 +44,8 @@ void UploadTaskNapiV5::CloseNapiScope(napi_env env, napi_handle_scope &scope)
     }
 }
 
+// May run on any thread: the three pinned refs are bundled into a
+// RecycleRef and deleted on the JS thread via a napi_send_event hop.
 UploadTaskNapiV5::~UploadTaskNapiV5()
 {
     if (env_ == nullptr) {
@@ -177,6 +179,9 @@ bool UploadTaskNapiV5::CreateFailJsParams(
     return true;
 }
 
+// Worker-thread entry (bound into UploadConfig::fsuccess): copy the
+// payload, hop to the JS thread, convert and invoke. No napi call
+// happens on the caller's thread.
 void UploadTaskNapiV5::OnSystemSuccess(napi_env env, napi_ref ref, Upload::UploadResponse &response)
 {
     UPLOAD_HILOGI(UPLOAD_MODULE_JS_NAPI, "OnSystemSuccess enter");
@@ -201,6 +206,8 @@ void UploadTaskNapiV5::OnSystemSuccess(napi_env env, napi_ref ref, Upload::Uploa
     }
 }
 
+// Worker-thread entry (bound into UploadConfig::ffail): same hop
+// pattern, invoking the fail ref with (data, code).
 void UploadTaskNapiV5::OnSystemFail(napi_env env, napi_ref ref, std::string &data, int32_t &code)
 {
     UPLOAD_HILOGI(UPLOAD_MODULE_JS_NAPI, "OnSystemFail enter");
@@ -228,6 +235,8 @@ void UploadTaskNapiV5::OnSystemFail(napi_env env, napi_ref ref, std::string &dat
     }
 }
 
+// Worker-thread entry (bound into UploadConfig::fcomplete): the hop
+// payload carries the proxy so this object outlives the event.
 void UploadTaskNapiV5::OnSystemComplete(std::shared_ptr<Upload::UploadTaskNapiV5> proxy)
 {
     UPLOAD_HILOGI(UPLOAD_MODULE_JS_NAPI, "OnSystemComplete enter");

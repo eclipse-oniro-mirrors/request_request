@@ -20,6 +20,9 @@
 
 using namespace OHOS::Request::Upload;
 namespace OHOS::Request::UploadNapi {
+// Peels an optional trailing function off argv (callback style, argc
+// shrinks by one), then runs the input stage on the JS thread. An input
+// failure leaves context_->ctx null, so Call()/SyncCall() bail out.
 AsyncCall::AsyncCall(napi_env env, napi_callback_info info, std::shared_ptr<Context> context) : env_(env)
 {
     context_ = new (std::nothrow) AsyncContext();
@@ -106,6 +109,10 @@ void AsyncCall::OnExecute(napi_env env, void *data)
     context->ctx->Exec();
 }
 
+// Completion on the JS thread: any failure (async-work status or output
+// stage) becomes the fixed E_SERVICE_ERROR "upload fail" business error;
+// the promise is resolved/rejected, or the pinned callback receives
+// (error, data). Ownership of the AsyncContext ends here.
 void AsyncCall::OnComplete(napi_env env, napi_status status, void *data)
 {
     UPLOAD_HILOGD(UPLOAD_MODULE_JS_NAPI, "run the js callback function");

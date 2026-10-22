@@ -29,14 +29,21 @@ static constexpr int ACL_SUCC = 0;
 
 // SA side reading and writing are aware of the `Other` permission of `UGO`;
 // otherwise, it will cause concurrency with the Set ACL and generate `Permission denied`.
+// ACL entries granting the download_server SA (uid 3815, EXPECT_UID in
+// runcount_notify_stub.cpp) access to app files: rw for downloaded files,
+// r for uploaded files, x to traverse directories, --- to revoke.
 static const std::string SA_PERMISSION_U_RW = "u:3815:rw";
 static const std::string SA_PERMISSION_U_R = "u:3815:r";
 static const std::string SA_PERMISSION_U_X = "u:3815:x";
 static const std::string SA_PERMISSION_U_CLEAN = "u:3815:---";
+// App sandbox base directories (el1/el2 device-level, el5 user-level).
 static const std::string AREA1 = "/data/storage/el1/base";
 static const std::string AREA2 = "/data/storage/el2/base";
 static const std::string AREA5 = "/data/storage/el5/base";
 
+// Refcount table behind AddPathsToMap/SubPathsToMap: path -> (isFile,
+// reference count); the ACL is revoked when the count drops to zero.
+// Guarded by pathMutex_.
 static std::mutex pathMutex_;
 static std::map<std::string, std::tuple<bool, uint32_t>> pathMap_;
 
@@ -90,6 +97,9 @@ std::vector<std::pair<std::string, bool>> SelectPath(const std::vector<std::stri
     return result;
 }
 
+// Picks the ACL entry by kind: for files it depends on the action (upload
+// only needs the SA to read, download needs read-write), ancestors get
+// execute-only to traverse.
 bool AddAcl(const std::string &path, const bool isFile, const Action action)
 {
     std::string entry;
@@ -119,6 +129,9 @@ bool SubAcl(const std::string &path)
     return true;
 }
 
+// Grants one path: registers it (or bumps its refcount) in pathMap_ and
+// applies the ACL. Re-applying on an existing entry keeps the ACL set even
+// if an earlier Sub failed to clean up.
 bool AddOnePathToMap(const std::string &path, const bool isFile, const Action action)
 {
     std::lock_guard<std::mutex> lockGuard(pathMutex_);
@@ -140,6 +153,9 @@ bool AddOnePathToMap(const std::string &path, const bool isFile, const Action ac
     return true;
 }
 
+// Releases one reference; the last one revokes the ACL and drops the map
+// entry. Anomalies (unknown path, changed isFile, zero count) are logged
+// but never crash the caller.
 bool SubOnePathToMap(const std::string &path, const bool isFile)
 {
     std::lock_guard<std::mutex> lockGuard(pathMutex_);
@@ -174,6 +190,8 @@ void SubPathsVec(const std::vector<std::pair<std::string, bool>> &paths)
     return;
 }
 
+// Grants the whole chain; if a component fails, releases the ones already
+// granted before returning false (no half-granted chain is left behind).
 bool PathUtils::AddPathsToMap(const std::string &path, const Action action)
 {
     std::vector<std::pair<std::string, bool>> paths = SelectPath(SplitPath(path));

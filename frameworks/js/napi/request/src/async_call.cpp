@@ -20,7 +20,13 @@
 #include "log.h"
 
 namespace OHOS::Request {
+// Max argv slots fetched from one JS call; extra arguments are ignored.
 constexpr uint8_t MAX_ARGC = 10;
+
+// Peels an optional trailing function off argv (callback style, shrinking
+// argc by one), then runs the input stage on the JS thread. An input
+// failure is recorded in innerCode_ and disables exec/output, so Call()
+// only reports the error.
 AsyncCall::AsyncCall(napi_env env, napi_callback_info info, const std::shared_ptr<Context> &context)
 {
     if (context == nullptr) {
@@ -60,6 +66,10 @@ AsyncCall::~AsyncCall()
 {
 }
 
+// Selects promise vs callback delivery, creates the async work named
+// "REQUEST_<resourceName>" and queues it with the configured QoS level.
+// Failures here clean up workData (and the work) inline — OnComplete will
+// not run.
 napi_value AsyncCall::Call(const std::shared_ptr<Context> &context, const std::string &resourceName)
 {
     if (context == nullptr) {
@@ -104,6 +114,8 @@ napi_value AsyncCall::Call(const std::shared_ptr<Context> &context, const std::s
     return ret;
 }
 
+// Worker-thread stage of the async work; the one-shot exec_ clearing also
+// guards against a second run.
 void AsyncCall::OnExecute(napi_env env, void *data)
 {
     WorkData *workData = reinterpret_cast<WorkData *>(data);
@@ -124,6 +136,8 @@ void AsyncCall::OnComplete(napi_env env, napi_status status, void *data)
         return;
     }
     napi_value result[ARG_BUTT] = { nullptr };
+    // API10 exposes a null error slot on success; API9 keeps it undefined
+    // so legacy callbacks see (undefined, data).
     if (context->version_ == Version::API10) {
         napi_get_null(env, &result[ARG_ERROR]);
     } else {

@@ -21,6 +21,8 @@
 
 namespace OHOS::Request {
 
+// Registers a JS callback; the first one also subscribes this listener
+// with the server.
 napi_status JSResponseListener::AddListener(napi_value cb)
 {
     napi_status ret = this->AddListenerInner(cb);
@@ -33,6 +35,8 @@ napi_status JSResponseListener::AddListener(napi_value cb)
     return napi_ok;
 }
 
+// Removes a JS callback (all of them when cb is null); dropping the last
+// one also unsubscribes from the server.
 napi_status JSResponseListener::RemoveListener(napi_value cb)
 {
     napi_status ret = this->RemoveListenerInner(cb);
@@ -45,6 +49,10 @@ napi_status JSResponseListener::RemoveListener(napi_value cb)
     return napi_ok;
 }
 
+// UDS-receive-thread entry: stash the response, then hop to the JS thread
+// via napi_send_event, where a handle scope is opened, the response is
+// converted and the callbacks are dispatched. No napi call is made on
+// this thread.
 void JSResponseListener::OnResponseReceive(const std::shared_ptr<Response> &response)
 {
     {

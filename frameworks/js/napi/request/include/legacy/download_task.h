@@ -24,8 +24,16 @@
 #include "curl/curl.h"
 
 namespace OHOS::Request::Legacy {
+// In-process curl download behind the legacy signature of
+// request.download (Legacy::RequestManager::Download) — no server SA
+// involved: one task runs on a detached thread driving a libcurl easy
+// handle. Resumes from the already-downloaded prefix when the local file
+// is shorter than the remote size, retries up to 10 times, then reports
+// through the DoneFunc callback.
 class DownloadTask {
 public:
+    /// One download request: url, target file name and directory, extra
+    /// header lines.
     struct DownloadOption {
         std::string url_;
         std::string filename_;
@@ -33,28 +41,43 @@ public:
         std::vector<std::string> header_;
     };
 
+    /// Completion callback: (taskId, successful, error message).
     using DoneFunc = std::function<void(const std::string &, bool, const std::string &)>;
     DownloadTask(const std::string &token, const DownloadOption &option, const DoneFunc &callback);
 
     ~DownloadTask();
 
+    /// Spawns the detached worker thread (after a one-time
+    /// curl_global_init).
     void Start();
 
+    /// Worker body: retry loop around size-probe + download.
     void Run();
 
+    /// One download attempt: resume from the local prefix (or
+    /// short-circuit when already complete), then perform.
     bool DoDownload();
 
+    /// Sets the byte offset the transfer resumes from.
     void SetResumeFromLarge(CURL *curl, uint64_t pos);
 
 private:
+    /// Opens/creates the target file (O_NOFOLLOW, truncated).
     FILE *OpenDownloadFile() const;
 
+    /// Size of the already-downloaded prefix (0 when the file is new).
     uint32_t GetLocalFileSize();
 
+    /// Wires the write file, error buffer, url, TLS settings, low-speed
+    /// abort thresholds and the extra headers.
     bool SetOption(CURL *handle, curl_slist *&headers);
 
+    /// Closes the file (removing it on failure) and reports via the
+    /// callback.
     void NotifyDone(bool successful, const std::string &errMsg = "");
 
+    /// One-shot HEAD request for the remote size; an unknown size is
+    /// treated as 0.
     bool GetFileSize(uint32_t &result);
 
     std::string taskId_;
@@ -63,6 +86,7 @@ private:
     std::thread *thread_{};
     FILE *filp_{};
     char *errorBuffer_{};
+    /// curl_global_init ran once in this process.
     static bool isCurlGlobalInited_;
 
     uint32_t totalSize_;

@@ -23,30 +23,63 @@
 #include "napi_base_context.h"
 
 namespace OHOS::Request {
+// Token length bounds (bytes) accepted by request.agent getTask/touch.
 static constexpr uint32_t TOKEN_MAX_BYTES = 2048;
 static constexpr uint32_t TOKEN_MIN_BYTES = 8;
+// The app sandbox base directories of the three distribution areas — the
+// same roots the PathUtils ACL grants operate on.
 static const std::string AREA1 = "/data/storage/el1/base";
 static const std::string AREA2 = "/data/storage/el2/base";
 static const std::string AREA5 = "/data/storage/el5/base";
 
+/// Extracts the host from a URL (lenient: scheme optional, backslashes
+/// tolerated; stops at port/path/query).
 std::string GetHostnameFromURL(const std::string &url);
 
+// Native-constructor plumbing for the JS Task classes. Initialize is the
+// constructor napi_new_instance invokes (through JsTask::Create /
+// RequestFile / RequestFileV8 / GetTaskCreate): it validates the caller's
+// arguments, parses the config and wraps a JsTask into the JS instance.
+// The remaining statics are context/path helpers shared with the parsers
+// in the sibling files (see the private section for the split).
 class JsInitialize {
 public:
     JsInitialize() = default;
     ~JsInitialize() = default;
 
+    /// Native Task constructor: parses (context, config) — API8 passes the
+    /// config alone — into a new JsTask and wraps it into the JS instance
+    /// being constructed. firstInit=false (the getTask path) skips checks
+    /// that must only run on first construction.
     static napi_value Initialize(napi_env env, napi_callback_info info, Version version, bool firstInit = true);
+    /// Resolves the caller's ability context: a stage-model context value
+    /// directly, otherwise the FA-model current ability.
     static napi_status GetContext(
         napi_env env, napi_value value, std::shared_ptr<OHOS::AbilityRuntime::Context> &context);
+    /// Fills baseDir with the application-level base directory.
     static bool GetAppBaseDir(std::string &baseDir);
+    /// Whether filepath starts with one of the app-storage area prefixes
+    /// (see the .cpp: the per-app baseDir is filled in but never compared
+    /// against the path).
     static bool CheckBelongAppBaseDir(const std::string &filepath, std::string &baseDir);
+    /// Splits str on delim, skipping empty segments.
     static void StringSplit(const std::string &str, const char delim, std::vector<std::string> &elems);
+    /// Trims spaces from both ends of str.
     static void StringTrim(std::string &str);
+    /// Creates the directory chain given as single-segment elements.
     static bool CreateDirs(const std::vector<std::string> &pathDirs);
+    /// Whether the directory exists.
     static bool FindDir(const std::string &pathDir);
 
 private:
+    // Private helpers, split across the sibling .cpp files:
+    // - js_initialize_config.cpp: the Parse* field readers, the
+    //   version-dispatching entry points (ParseConfig API10, ParseConfigV9
+    //   API8/9) and the forms and files conversion (GetFormItems and Convert2 helpers);
+    // - js_initialize_file.cpp: the per-task-type file checks
+    //   (CheckUpload*/CheckDownload*/GetFd*/...) behind CheckFilePath;
+    // - js_initialize_path.cpp: sandbox path standardization
+    //   (StandardizePath/BaseToWhole/CacheToWhole/FileToWhole/...ToNormal).
     static ExceptionError InitParam(
         napi_env env, napi_value *argv, std::shared_ptr<OHOS::AbilityRuntime::Context> &context, Config &config);
     static void ParseConfigInner(napi_env env, napi_value jsConfig, Config &config);

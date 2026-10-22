@@ -27,6 +27,9 @@
 
 namespace OHOS::Request {
 
+// Resolves the API9 internal://cache/<name> form to the app cache dir:
+// strips the prefix (a bare file name also works), requires a non-empty
+// name and a valid resulting path.
 bool JsInitialize::GetInternalPath(const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, const Config &config,
     std::string &path, std::string &errInfo)
 {
@@ -57,6 +60,9 @@ bool JsInitialize::GetInternalPath(const std::shared_ptr<OHOS::AbilityRuntime::C
     return true;
 }
 
+// API10 path resolution: standardize the prefix form (StandardizePath),
+// remove "." and ".." segments (WholeToNormal) and require the result to
+// live under an app sandbox area root (CheckBelongAppBaseDir).
 bool JsInitialize::GetSandboxPath(const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, const Config &config,
     std::string &path, std::vector<std::string> &pathVec, std::string &errInfo)
 {
@@ -79,6 +85,11 @@ bool JsInitialize::GetSandboxPath(const std::shared_ptr<OHOS::AbilityRuntime::Co
     return true;
 }
 
+// Rewrites a saveas/file path into its whole-path form: "/" is kept as
+// is, "file://" resolves against the app's own bundle (FileToWhole),
+// "internal://" against the context base dir (BaseToWhole), and
+// everything else — including "./" — against the cache dir
+// (CacheToWhole).
 // The path must not be a user (fd-based) file.
 bool JsInitialize::StandardizePath(
     const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, const Config &config, std::string &path)
@@ -131,6 +142,8 @@ bool JsInitialize::CacheToWhole(const std::shared_ptr<OHOS::AbilityRuntime::Cont
     return true;
 }
 
+// file://<bundle>/... form: only the app's own bundle is accepted; the
+// bundle prefix is stripped, leaving a whole path.
 bool JsInitialize::FileToWhole(
     const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, const Config &config, std::string &path)
 {
@@ -143,6 +156,9 @@ bool JsInitialize::FileToWhole(
     return true;
 }
 
+// Splits the whole path, drops "." segments and resolves ".."
+// (PathVecToNormal), then rebuilds the path in place; out receives the
+// normalized segments.
 bool JsInitialize::WholeToNormal(std::string &path, std::vector<std::string> &out)
 {
     std::string normalPath;

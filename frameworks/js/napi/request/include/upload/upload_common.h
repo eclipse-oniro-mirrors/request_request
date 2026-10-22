@@ -19,6 +19,8 @@
 #include <string>
 
 namespace OHOS::Request::Upload {
+// Event kinds of the in-process upload subtree: which upload event a
+// callback registered through UploadTask::SetCallback observes.
 enum Type {
     TYPE_PROGRESS_CALLBACK,
     TYPE_HEADER_RECEIVE_CALLBACK,
@@ -26,6 +28,9 @@ enum Type {
     TYPE_COMPLETE_CALLBACK,
 };
 
+// Result codes of the in-process upload pipeline (config parsing, file
+// fetching, libcurl adapter). UPLOAD_OK is 0; the numeric order is
+// observable through the old upload fail callback.
 enum UploadErrorCode {
     UPLOAD_OK = 0,
     UPLOAD_ERRORCODE_UNSUPPORT_URI,
@@ -38,18 +43,24 @@ enum UploadErrorCode {
     UPLOAD_CURLE_SSL_CONNECT_ERROR,
 };
 
+// Terminal state of one uploaded file, as reported by the old upload
+// callbacks: file path, HTTP response code and message.
 struct TaskState {
     std::string path;
     int32_t responseCode{ UPLOAD_OK };
     std::string message;
 };
 
+// HTTP methods the upload supports; compared against UploadConfig::method.
 static constexpr const char *POST = "POST";
 static constexpr const char *PUT = "PUT";
+// protocolVersion tag of the API3-era upload config; branches config
+// parsing and the upload behavior (upload_task.cpp, upload_task_napiV5.cpp).
 static constexpr const char *API3 = "API3";
 static constexpr int32_t ONE_ARG = 1;
 static constexpr int32_t TWO_ARG = 2;
 
+// Default-visibility export marker for the upload subtree's classes.
 #ifndef UPLOAD_API
 #define UPLOAD_API __attribute__((visibility("default")))
 #endif

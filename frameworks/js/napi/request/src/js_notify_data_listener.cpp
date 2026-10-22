@@ -27,6 +27,9 @@
 
 namespace OHOS::Request {
 
+// Registers a JS callback; the first one subscribes this listener with
+// the server (REMOVE listeners never subscribe here — see the note
+// above).
 napi_status JSNotifyDataListener::AddListener(napi_value cb)
 {
     napi_status ret = this->AddListenerInner(cb);
@@ -40,6 +43,9 @@ napi_status JSNotifyDataListener::AddListener(napi_value cb)
     return napi_ok;
 }
 
+// Removes a JS callback (all of them when cb is null); dropping the last
+// one unsubscribes from the server (REMOVE listeners never do, so they
+// stay alive to free the task).
 napi_status JSNotifyDataListener::RemoveListener(napi_value cb)
 {
     napi_status ret = this->RemoveListenerInner(cb);
@@ -52,6 +58,10 @@ napi_status JSNotifyDataListener::RemoveListener(napi_value cb)
     return napi_ok;
 }
 
+// Whether the response body must be loaded from the staged body file for
+// this notification: API9 upload headerReceive, and API10 upload
+// completion (the final progress/completed events carry the response
+// body).
 bool JSNotifyDataListener::IsHeaderReceive(const std::shared_ptr<NotifyData> &notifyData)
 {
     if (notifyData->version == Version::API9 && notifyData->action == Action::UPLOAD
@@ -65,6 +75,10 @@ bool JSNotifyDataListener::IsHeaderReceive(const std::shared_ptr<NotifyData> &no
     return false;
 }
 
+// Loads the response body staged by the server into
+// progress.bodyBytes (multipart tasks always use file index 0) and
+// applies the version-specific temp-file lifecycle (API10 deletion rules
+// below).
 void JSNotifyDataListener::ProcessHeaderReceive(const std::shared_ptr<NotifyData> &notifyData)
 {
     uint32_t index = notifyData->progress.index;
@@ -104,6 +118,11 @@ void JSNotifyDataListener::ProcessHeaderReceive(const std::shared_ptr<NotifyData
     }
 }
 
+// Fills the JS callback arguments per version and event: API10 always a
+// single Progress object; API9 download progress → (processed,
+// sizes[0]), fail → the mapped legacy error code; API9 upload progress →
+// (totalProcessed, sum of sizes), completed/failed → the TaskState
+// array, headerReceive → headers plus body.
 void JSNotifyDataListener::NotifyDataProcess(
     const std::shared_ptr<NotifyData> &notifyData, napi_value *value, uint32_t &paramNumber)
 {
@@ -182,6 +201,9 @@ static std::string SubscribeTypeToString(SubscribeType type)
     }
 }
 
+// Terminal-event policy: API9 completed/failed/remove and API10 remove
+// release the task fully (files, ACLs and the task context); API10
+// completed/failed only clear the temp body files.
 static RemoveTaskChecker CheckRemoveJSTask(const std::shared_ptr<NotifyData> &notifyData, const std::string &tid)
 {
     if (notifyData->version == Version::API9
@@ -198,6 +220,9 @@ static RemoveTaskChecker CheckRemoveJSTask(const std::shared_ptr<NotifyData> &no
     return RemoveTaskChecker::DoNothing;
 }
 
+// JS-thread dispatch of one notification: convert the callback arguments,
+// apply the terminal-event cleanup policy (ClearTaskTemp /
+// ClearTaskThing + RemoveTaskContext) and deliver the callbacks.
 void JSNotifyDataListener::DoJSTask(const std::shared_ptr<NotifyData> &notifyData)
 {
     std::string tid = std::to_string(notifyData->taskId);
@@ -221,6 +246,9 @@ void JSNotifyDataListener::DoJSTask(const std::shared_ptr<NotifyData> &notifyDat
     }
 }
 
+// UDS-receive-thread entry: hop to the JS thread via napi_send_event
+// (no napi call on this thread); the payload is owned by the event
+// lambda and deleted on the JS thread, or here when the hop fails.
 void JSNotifyDataListener::OnNotifyDataReceive(const std::shared_ptr<NotifyData> &notifyData)
 {
     NotifyDataPtr *ptr = new (std::nothrow) NotifyDataPtr;
@@ -258,6 +286,8 @@ void JSNotifyDataListener::OnNotifyDataReceive(const std::shared_ptr<NotifyData>
     }
 }
 
+// faultOccur: same JS-thread hop with the reason as the argument; also
+// clears the task's temp body files.
 void JSNotifyDataListener::OnFaultsReceive(const std::shared_ptr<int32_t> &tid,
     const std::shared_ptr<SubscribeType> &type, const std::shared_ptr<Reason> &reason)
 {
@@ -294,6 +324,7 @@ void JSNotifyDataListener::OnFaultsReceive(const std::shared_ptr<int32_t> &tid,
     }
 }
 
+// wait: same JS-thread hop with the WaitingReason as the argument.
 void JSNotifyDataListener::OnWaitReceive(std::int32_t taskId, WaitingReason reason)
 {
     REQUEST_HILOGI("Notify wait, tid %{public}d, reason: %{public}d", taskId, static_cast<int32_t>(reason));

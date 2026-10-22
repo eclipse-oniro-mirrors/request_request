@@ -33,10 +33,12 @@
 #include "sys_event.h"
 
 static constexpr uint32_t FILE_PERMISSION = 0644;
+// Cap on the number of multipart upload files (API10 on SDK 15+).
 static constexpr uint32_t MAX_UPLOAD_ON15_FILES = 100;
 
 namespace OHOS::Request {
 
+// Human-readable errno suffix for file-open error messages.
 static std::string GetErrnoAppendMessage(int32_t errNum)
 {
     switch (errNum) {
@@ -55,6 +57,10 @@ static std::string GetErrnoAppendMessage(int32_t errNum)
     }
 }
 
+// Post-parse validation of the task's file set, dispatched per action:
+// download → saveas target (CheckDownloadFile); upload → every file
+// (CheckUploadFiles) plus the body temp files staged in the app cache
+// dir; finally stages the https certs (SetDirsPermission).
 bool JsInitialize::CheckFilePath(
     const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, Config &config, ExceptionError &error)
 {
@@ -83,6 +89,11 @@ bool JsInitialize::CheckFilePath(
     return true;
 }
 
+// Pre-creates empty body temp files in the app cache dir — one per file,
+// or a single one for multipart — and records them in
+// config.bodyFileNames; the SA later gets read-write access to them (see
+// JsTask::AuthorizePath) and the cleanup paths delete them
+// (ClearTaskTemp/ClearTaskThing).
 bool JsInitialize::CheckUploadBodyFiles(const std::string &filePath, Config &config, ExceptionError &error)
 {
     size_t len = config.files.size();
@@ -125,6 +136,7 @@ bool JsInitialize::CheckUploadBodyFiles(const std::string &filePath, Config &con
     return true;
 }
 
+// The path must exist and not be a directory.
 bool JsInitialize::CheckPathIsFile(const std::string &path, ExceptionError &error)
 {
     std::error_code err;
@@ -143,6 +155,9 @@ bool JsInitialize::CheckPathIsFile(const std::string &path, ExceptionError &erro
     return true;
 }
 
+// Probes the download target: an existing file is an error unless
+// overwrite is set or this is a re-initialization (getTask); first
+// creation truncates ("w+"), re-init appends ("a+").
 bool JsInitialize::GetFdDownload(const std::string &path, const Config &config, ExceptionError &error)
 {
     // The target file already exists.
@@ -177,6 +192,8 @@ bool JsInitialize::GetFdDownload(const std::string &path, const Config &config, 
     return true;
 }
 
+// Probes an upload source: it must be an existing regular file readable
+// by this process.
 bool JsInitialize::GetFdUpload(const std::string &path, const Config &config, ExceptionError &error)
 {
     if (!JsInitialize::CheckPathIsFile(path, error)) {
@@ -201,6 +218,9 @@ bool JsInitialize::GetFdUpload(const std::string &path, const Config &config, Ex
     return true;
 }
 
+// Fills the derived file fields: filename defaults to the last uri
+// segment, type to the filename extension when no contentType was given,
+// name to "file".
 void JsInitialize::StandardizeFileSpec(FileSpec &file)
 {
     if (file.filename.empty()) {
@@ -216,6 +236,10 @@ void JsInitialize::StandardizeFileSpec(FileSpec &file)
     return;
 }
 
+// Opens a user file (file://docs/ or file://media/): uploads open a read
+// fd through the DataAbility helper, downloads open the real path
+// directly (truncating on first init, appending otherwise). FOREGROUND
+// mode only; the fd is tagged with REQUEST_FDSAN_TAG.
 bool JsInitialize::CheckUserFileSpec(const std::shared_ptr<OHOS::AbilityRuntime::Context> &context,
     const Config &config, FileSpec &file, ExceptionError &error, bool isUpload)
 {
@@ -259,6 +283,9 @@ bool JsInitialize::CheckUserFileSpec(const std::shared_ptr<OHOS::AbilityRuntime:
     return true;
 }
 
+// Validates every upload file: API10 on SDK 15+ caps the multipart file
+// count; user files (API10 only, FOREGROUND) go through
+// CheckUserFileSpec, everything else through the regular spec check.
 bool JsInitialize::CheckUploadFiles(
     const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, Config &config, ExceptionError &error)
 {
@@ -295,6 +322,9 @@ bool JsInitialize::CheckUploadFiles(
     return true;
 }
 
+// Normalizes one non-user upload file's path to a sandbox path (API9:
+// internal path + normalization; API10: GetSandboxPath), verifies it is
+// a readable file and fills the derived fields.
 bool JsInitialize::CheckUploadFileSpec(const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, Config &config,
     FileSpec &file, ExceptionError &error)
 {
@@ -322,6 +352,8 @@ bool JsInitialize::CheckUploadFileSpec(const std::shared_ptr<OHOS::AbilityRuntim
     return true;
 }
 
+// API9 path normalization pass (WholeToNormal rewrites path in place);
+// failures are only logged.
 void JsInitialize::StandardizePathApi9(std::string &path)
 {
     std::vector<std::string> pathVec;
@@ -330,6 +362,10 @@ void JsInitialize::StandardizePathApi9(std::string &path)
     };
 }
 
+// Validates and registers the download target: user files (API10,
+// overwrite required) open directly; API9 resolves the internal path,
+// API10 goes through CheckDownloadFilePath; the resulting FileSpec is
+// appended to config.files and the target is probed (GetFdDownload).
 bool JsInitialize::CheckDownloadFile(
     const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, Config &config, ExceptionError &error)
 {
@@ -375,6 +411,8 @@ bool JsInitialize::CheckDownloadFile(
     return true;
 }
 
+// Standardizes the saveas path to a sandbox path and creates its parent
+// directory chain.
 bool JsInitialize::CheckDownloadFilePath(
     const std::shared_ptr<OHOS::AbilityRuntime::Context> &context, Config &config, std::string &errInfo)
 {
@@ -394,6 +432,8 @@ bool JsInitialize::CheckDownloadFilePath(
     return true;
 }
 
+// Creates each missing directory level given as single-segment elements
+// (existing levels are skipped).
 bool JsInitialize::CreateDirs(const std::vector<std::string> &pathDirs)
 {
     std::string path;
@@ -414,12 +454,15 @@ bool JsInitialize::CreateDirs(const std::vector<std::string> &pathDirs)
     return true;
 }
 
+// Whether the path exists (despite the name, also used on files).
 bool JsInitialize::FindDir(const std::string &pathDir)
 {
     std::error_code err;
     return std::filesystem::exists(pathDir, err);
 }
 
+// User files are file://docs/ or file://media/ URIs (fd-based access, no
+// sandbox ACL needed).
 bool JsInitialize::IsUserFile(const std::string &path)
 {
     return path.find("file://docs/") == 0 || path.find("file://media/") == 0;

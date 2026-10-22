@@ -24,8 +24,18 @@
 #include "upload/js_util.h"
 
 namespace OHOS::Request::UploadNapi {
+// Self-contained AsyncCall copy for the old in-process upload subtree,
+// kept beside (not merged with) the root-tree AsyncCall that serves
+// request.agent. Same three-stage skeleton (input on the JS thread, exec
+// on a worker, output on the JS thread, each action runs once), but with
+// upload-specific behavior: an added SyncCall that runs execute +
+// complete inline, and a fixed error shape — any failure reports an
+// E_SERVICE_ERROR "upload fail" business error, whereas the root tree
+// records an inner code and shapes the error per version.
 class AsyncCall final {
 public:
+    // Per-call state: input/output/exec actions are consumed on first
+    // use, so a stage cannot run twice.
     class Context {
     public:
         using InputAction = std::function<napi_status(napi_env, size_t, napi_value *, napi_value)>;
@@ -44,6 +54,7 @@ public:
             SetAction(nullptr, std::move(output));
         }
 
+        /// Input stage (JS thread): runs and clears input_.
         virtual napi_status operator()(napi_env env, size_t argc, napi_value *argv, napi_value self)
         {
             if (input_ == nullptr) {
@@ -54,6 +65,8 @@ public:
             return ret;
         }
 
+        /// Output stage (JS thread): runs and clears output_, producing
+        /// the result value.
         virtual napi_status operator()(napi_env env, napi_value *result)
         {
             if (output_ == nullptr) {
@@ -65,6 +78,7 @@ public:
             return ret;
         }
 
+        /// Exec stage (worker thread): runs and clears exec_.
         virtual void Exec()
         {
             if (exec_ == nullptr) {
@@ -83,13 +97,22 @@ public:
 
     AsyncCall(napi_env env, napi_callback_info info, std::shared_ptr<Context> context);
     ~AsyncCall();
+    /// Queues the async work: promise result when no trailing callback
+    /// was pinned, undefined + callback invocation otherwise.
     napi_value Call(napi_env env, Context::ExecAction exec = nullptr);
+    /// Runs exec and the completion handling inline on the calling
+    /// thread, without creating async work.
     napi_value SyncCall(napi_env env, Context::ExecAction exec = nullptr);
 
 private:
+    // Callback layout of OnComplete: [error, data].
     enum { ARG_ERROR, ARG_DATA, ARG_BUTT };
     static void OnExecute(napi_env env, void *data);
     static void OnComplete(napi_env env, napi_status status, void *data);
+    // One async call: the shared Context, the pinned trailing callback
+    // and this-argument references, plus the promise/async-work handles.
+    // Freed by DeleteContext after completion (or in ~AsyncCall when
+    // Call/SyncCall never ran).
     struct AsyncContext {
         std::shared_ptr<Context> ctx = nullptr;
         napi_ref callback = nullptr;

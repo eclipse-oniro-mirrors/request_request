@@ -29,19 +29,31 @@
 #define SPLIT_THREE 3
 
 namespace OHOS::Request::Upload {
+// Opens upload source files by URI scheme: "dataability" URIs resolve
+// through a data ability (read-only fd), "internal://cache/<name>" to a
+// file in the app cache dir; any other scheme is UNSUPPORT_URI. Also
+// reports the file size in bytes. The heavy lifting goes through the
+// IFileAdapter seam.
 class ObtainFile {
 public:
     ObtainFile();
     ~ObtainFile();
+    /// Dispatches by URI scheme; on failure *file is null / fileSize 0
+    /// and the UploadErrorCode is returned.
     uint32_t GetFile(FILE **file, const std::string &fileUri, uint32_t &fileSize,
         std::shared_ptr<OHOS::AbilityRuntime::Context> &context);
 
 protected:
+    /// fdopen("r") of the data ability's fd; the FILE* owns the fd.
     uint32_t GetDataAbilityFile(FILE **file, const std::string &fileUri, uint32_t &fileSize,
         std::shared_ptr<OHOS::AbilityRuntime::Context> &context);
+    /// Cache-dir file by relative name, fopen("r").
     uint32_t GetInternalFile(FILE **file, const std::string &fileUri, uint32_t &fileSize,
         std::shared_ptr<OHOS::AbilityRuntime::Context> &context);
+    /// Strips the mandatory "internal://cache/" prefix.
     bool SplitPath(const std::string &fileUri, std::string &fileName);
+    /// The realpath must resolve to the path itself — symlinks and
+    /// missing files are rejected.
     bool IsValidPath(const std::string &filePath);
 
 private:

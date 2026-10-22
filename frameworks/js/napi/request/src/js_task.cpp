@@ -44,6 +44,8 @@
 using namespace OHOS::StorageDaemon;
 namespace fs = std::filesystem;
 namespace OHOS::Request {
+// Width of the default time window used by Search when the filter carries
+// no time bounds (search then looks back one day).
 constexpr int64_t MILLISECONDS_IN_ONE_DAY = 24 * 60 * 60 * 1000;
 std::mutex JsTask::createMutex_;
 thread_local napi_ref JsTask::createCtor = nullptr;
@@ -57,6 +59,8 @@ std::mutex JsTask::taskMutex_;
 std::map<std::string, std::shared_ptr<JsTask::ContextInfo>> JsTask::taskContextMap_;
 bool JsTask::register_ = false;
 
+// Instance method table of the API10 Task class (request.agent): event
+// subscription plus lifecycle control, all dispatched through RequestEvent.
 napi_property_descriptor clzDes[] = {
     DECLARE_NAPI_FUNCTION(FUNCTION_ON, RequestEvent::On),
     DECLARE_NAPI_FUNCTION(FUNCTION_OFF, RequestEvent::Off),
@@ -67,6 +71,10 @@ napi_property_descriptor clzDes[] = {
     DECLARE_NAPI_FUNCTION(FUNCTION_SET_MAX_SPEED, RequestEvent::SetMaxSpeed),
 };
 
+// Instance method table of the API8/9 class (request.download/upload,
+// downloadFile/uploadFile): same RequestEvent targets as the API10 class,
+// plus suspend/delete/restore aliases and the getTaskInfo/getTaskMimeType/
+// query/queryMimeType/remove legacy names.
 napi_property_descriptor clzDesV9[] = {
     DECLARE_NAPI_FUNCTION(FUNCTION_ON, RequestEvent::On),
     DECLARE_NAPI_FUNCTION(FUNCTION_OFF, RequestEvent::Off),
@@ -86,6 +94,10 @@ JsTask::~JsTask()
 {
     REQUEST_HILOGD("~JsTask()");
 }
+// request.upload: API5-7 callback-style signatures are peeled off here and
+// served entirely in-process by UploadTaskNapiV5 (the curl path); SetEnv
+// detaches the proxy's env handle, then options-object calls continue
+// through the server-backed flow as API8.
 napi_value JsTask::JsUpload(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -99,6 +111,9 @@ napi_value JsTask::JsUpload(napi_env env, napi_callback_info info)
     return JsMain(env, info, Version::API8, seq);
 }
 
+// request.download: the legacy signature is routed to
+// Legacy::RequestManager; options-object calls go through the
+// server-backed flow as API8.
 napi_value JsTask::JsDownload(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -109,6 +124,8 @@ napi_value JsTask::JsDownload(napi_env env, napi_callback_info info)
     return JsMain(env, info, Version::API8, seq);
 }
 
+// request.downloadFile/uploadFile (API9): a single entry; the action is
+// inferred from the options object (see NapiUtils::GetRequestAction).
 napi_value JsTask::JsRequestFile(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -116,6 +133,7 @@ napi_value JsTask::JsRequestFile(napi_env env, napi_callback_info info)
     return JsMain(env, info, Version::API9, seq);
 }
 
+// request.agent.create (API10).
 napi_value JsTask::JsCreate(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -123,6 +141,11 @@ napi_value JsTask::JsCreate(napi_env env, napi_callback_info info)
     return JsMain(env, info, Version::API10, seq);
 }
 
+// Input stage shared by all versions: instantiates the version's Task JS
+// class with the caller's argv (the native constructor parses the config),
+// unwraps the JsTask pointer and pins the JS object with a persistent
+// reference; API10 additionally exposes the raw config object as the
+// instance's "config" property.
 napi_status JsTask::CreateInput(std::shared_ptr<ContextInfo> context, const int32_t seq, size_t argc, napi_value *argv)
 {
     napi_value ctor = GetCtor(context->env_, context->version_);
@@ -149,6 +172,11 @@ napi_status JsTask::CreateInput(std::shared_ptr<ContextInfo> context, const int3
     return napi_ok;
 }
 
+// Shared creation flow for API8-10: exec grants the sandbox ACLs and
+// creates the task on the server (CreateExec); output resolves with the
+// Task object, records it in taskContextMap_ and (API10) exposes the tid.
+// Error-shape compatibility: API9 upload failures reject without an error
+// code (withErrCode_ = false), while API8 permission failures include one.
 napi_value JsTask::JsMain(napi_env env, napi_callback_info info, Version version, int32_t seq)
 {
     auto context = std::make_shared<ContextInfo>();
@@ -204,6 +232,11 @@ void JsTask::AddTaskWhenCreate(std::shared_ptr<ContextInfo> context)
     }
 }
 
+// Worker-stage creation: a FOREGROUND task installs the SA-restart resume
+// callback (see AppStateCallback); AuthorizePath grants the SA the ACLs it
+// needs for the task files; RequestManager::Create mints the tid on the
+// server. On success a REMOVE listener is registered so this side can
+// react when the server removes the task.
 int32_t JsTask::CreateExec(const std::shared_ptr<ContextInfo> &context, int32_t seq)
 {
     REQUEST_HILOGD("JsTask CreateExec: Action %{public}d, Mode %{public}d, seq: %{public}d",
@@ -227,6 +260,10 @@ int32_t JsTask::CreateExec(const std::shared_ptr<ContextInfo> &context, int32_t 
     return ret;
 }
 
+// Grants the download_server SA access to the task's sandbox files:
+// download authorizes its single saveas target (user files are already
+// accessible to it); upload authorizes every non-user source file (read)
+// and each bodyFileName with read-write.
 int32_t JsTask::AuthorizePath(const Config &config)
 {
     if (config.action == Action::DOWNLOAD) {
@@ -258,6 +295,8 @@ int32_t JsTask::AuthorizePath(const Config &config)
     return E_OK;
 }
 
+// Registers the task's REMOVE listener with the server so this side can
+// react when the server removes the task (see RemoveTaskContext).
 void JsTask::AddRemoveListener(const std::shared_ptr<ContextInfo> &context)
 {
     std::string tid = context->tid;
@@ -283,6 +322,8 @@ napi_value JsTask::GetCtor(napi_env env, Version version)
     return nullptr;
 }
 
+// Returns this thread's cached API10 Task class; defined (once per thread)
+// with the clzDes method table and the API10 native constructor.
 napi_value JsTask::GetCtorV10(napi_env env)
 {
     REQUEST_HILOGD("GetCtorV10 in");
@@ -296,6 +337,8 @@ napi_value JsTask::GetCtorV10(napi_env env)
     return DefineClass(env, clzDes, count, Create, &createCtor);
 }
 
+// Returns this thread's cached API9 Task class (clzDesV9 methods, API9
+// native constructor).
 napi_value JsTask::GetCtorV9(napi_env env)
 {
     REQUEST_HILOGD("GetCtorV9 in");
@@ -310,6 +353,8 @@ napi_value JsTask::GetCtorV9(napi_env env)
     return DefineClass(env, clzDesV9, count, RequestFile, &requestFileCtor);
 }
 
+// Returns this thread's cached API8 Task class — the same clzDesV9 JS
+// surface as V9, but with the API8 native constructor.
 napi_value JsTask::GetCtorV8(napi_env env)
 {
     REQUEST_HILOGD("GetCtorV8 in");
@@ -323,6 +368,8 @@ napi_value JsTask::GetCtorV8(napi_env env)
     return DefineClass(env, clzDesV9, count, RequestFileV8, &requestCtor);
 }
 
+// Defines the JS class "Request" with the given method table and native
+// constructor, caching the constructor in *ctor.
 napi_value JsTask::DefineClass(
     napi_env env, const napi_property_descriptor *desc, size_t count, napi_callback cb, napi_ref *ctor)
 {
@@ -340,6 +387,9 @@ napi_value JsTask::DefineClass(
     return cons;
 }
 
+// Native constructors of the three JS Task classes: invoked by
+// napi_new_instance during the create input stage, they parse argv into
+// the JsTask's config_ via JsInitialize::Initialize.
 napi_value JsTask::Create(napi_env env, napi_callback_info info)
 {
     REQUEST_HILOGD("Create API10");
@@ -358,6 +408,9 @@ napi_value JsTask::RequestFileV8(napi_env env, napi_callback_info info)
     return JsInitialize::Initialize(env, info, Version::API8);
 }
 
+// Returns this thread's cached Task class used to construct instances for
+// tasks fetched from the server (clzDes methods, GetTaskCreate native
+// constructor).
 napi_value JsTask::GetTaskCtor(napi_env env)
 {
     REQUEST_HILOGD("GetTaskCtor in");
@@ -372,12 +425,17 @@ napi_value JsTask::GetTaskCtor(napi_env env)
     return DefineClass(env, clzDes, count, GetTaskCreate, &getTaskCreateCtor);
 }
 
+// Native constructor used when getTask instantiates the Task class.
 napi_value JsTask::GetTaskCreate(napi_env env, napi_callback_info info)
 {
     REQUEST_HILOGD("GetTask Create");
     return JsInitialize::Initialize(env, info, Version::API10, false);
 }
 
+// request.agent.getTask(context, tid, token?): AsyncCall entry — the exec
+// stage serves tasks created in this process from the local map and fetches
+// everything else from the server; the output stage hands back the live JS
+// object or constructs a fresh one (GetTaskOutput).
 napi_value JsTask::GetTask(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -414,6 +472,11 @@ napi_value JsTask::GetTask(napi_env env, napi_callback_info info)
     return asyncCall.Call(context, "getTask");
 }
 
+// Worker stage of getTask: fast path — the task was created in this
+// process (taskContextMap_ hit), reuse its config after the token
+// capability check; slow path — fetch the config from the server, set
+// saveas for downloads, re-grant the sandbox ACLs, and require the task to
+// be an API10 task whose token matches.
 void JsTask::GetTaskExecution(std::shared_ptr<ContextInfo> context)
 {
     // Set context->config.
@@ -457,6 +520,9 @@ void JsTask::GetTaskExecution(std::shared_ptr<ContextInfo> context)
     }
 }
 
+// Constructs a fresh JS Task object for a server-fetched task: converts
+// the config, instantiates the getTask class with (context, config),
+// unwraps the JsTask, exposes config/tid (API10) and pins a reference.
 napi_status JsTask::CtorJsTask(std::shared_ptr<ContextInfo> context, napi_value *result)
 {
     napi_value jsConfig = NapiUtils::Convert2JSValueConfig(context->env_, context->config);
@@ -487,6 +553,9 @@ napi_status JsTask::CtorJsTask(std::shared_ptr<ContextInfo> context, napi_value 
     return status;
 }
 
+// Hands back the JS object of an already-live task; refused when the
+// caller's env differs from the task's creating env (a JS object cannot
+// cross envs).
 napi_status JsTask::CheckTaskInMap(
     std::shared_ptr<ContextInfo> context, std::shared_ptr<ContextInfo> mapContext, napi_value *result)
 {
@@ -505,6 +574,9 @@ napi_status JsTask::CheckTaskInMap(
     return napi_ok;
 }
 
+// Output stage of getTask: live task in the map — reuse its object
+// (CheckTaskInMap); new task — construct via CtorJsTask, record it in
+// taskContextMap_, subscribe to SA death and register the REMOVE listener.
 napi_status JsTask::GetTaskOutput(std::shared_ptr<ContextInfo> context, napi_value *result, int32_t seq)
 {
     std::lock_guard<std::mutex> lockGuard(JsTask::taskMutex_);
@@ -534,6 +606,8 @@ napi_status JsTask::GetTaskOutput(std::shared_ptr<ContextInfo> context, napi_val
     return napi_ok;
 }
 
+// Validates (context, tid, token?): tid must be a non-empty string of at
+// most 32 bytes; the optional token must be 8-2048 bytes.
 ExceptionError JsTask::ParseGetTask(napi_env env, size_t argc, napi_value *argv, std::shared_ptr<ContextInfo> context)
 {
     ExceptionError err = { .code = E_OK };
@@ -602,6 +676,8 @@ ExceptionError JsTask::ParseGetTask(napi_env env, size_t argc, napi_value *argv,
     return err;
 }
 
+// request.agent.remove(tid): removes the task on the server; resolves with
+// true on success, rejects with the error code otherwise.
 napi_value JsTask::Remove(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -641,6 +717,7 @@ napi_value JsTask::Remove(napi_env env, napi_callback_info info)
     return asyncCall.Call(context, "remove");
 }
 
+// Validates the tid argument (non-empty string) shared by remove/query.
 ExceptionError JsTask::ParseTid(napi_env env, size_t argc, napi_value *argv, std::string &tid)
 {
     ExceptionError err = { .code = E_OK };
@@ -665,6 +742,8 @@ ExceptionError JsTask::ParseTid(napi_env env, size_t argc, napi_value *argv, std
     return err;
 }
 
+// request.agent.show(tid): task info without the token capability — the
+// shared TouchInner path with the default "null" token.
 napi_value JsTask::Show(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -688,6 +767,8 @@ napi_value JsTask::Show(napi_env env, napi_callback_info info)
     return TouchInner(env, info, std::move(input), std::move(context), seq);
 }
 
+// request.agent.touch(tid, token): task info guarded by the token
+// capability.
 napi_value JsTask::Touch(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -705,6 +786,8 @@ napi_value JsTask::Touch(napi_env env, napi_callback_info info)
     return TouchInner(env, info, std::move(input), std::move(context), seq);
 }
 
+// Shared implementation of show/touch: exec calls the server Touch and
+// fills taskInfo; output resolves with the serialized TaskInfo.
 napi_value JsTask::TouchInner(napi_env env, napi_callback_info info, AsyncCall::Context::InputAction input,
     std::shared_ptr<TouchContext> context, int32_t seq)
 {
@@ -761,6 +844,8 @@ bool JsTask::ParseTouchCheck(const napi_env env, const size_t argc, const napi_v
     return true;
 }
 
+// Validates (tid, token) for touch: tid via the shared checks above, then
+// the token must be 8-2048 bytes.
 ExceptionError JsTask::ParseTouch(napi_env env, size_t argc, napi_value *argv, std::shared_ptr<TouchContext> context)
 {
     ExceptionError err = { .code = E_OK };
@@ -797,6 +882,10 @@ ExceptionError JsTask::ParseTouch(napi_env env, size_t argc, napi_value *argv, s
     return err;
 }
 
+// Parses the optional search filter. Defaults (also used per field when
+// the value is missing or of the wrong type): bundle "*", state/action/
+// mode ANY, and the time window [now - one day, now]. A window whose end
+// (before) precedes its start (after) is rejected.
 ExceptionError JsTask::ParseSearch(napi_env env, size_t argc, napi_value *argv, Filter &filter)
 {
     ExceptionError err = { .code = E_OK };
@@ -832,6 +921,9 @@ ExceptionError JsTask::ParseSearch(napi_env env, size_t argc, napi_value *argv, 
     return err;
 }
 
+// Lenient per-field filter readers: a missing or wrong-typed value falls
+// back to the field's default (wildcard for bundle/state/action/mode, now
+// for before, now - one day for after).
 std::string JsTask::ParseBundle(napi_env env, napi_value value)
 {
     if (!NapiUtils::HasNamedProperty(env, value, "bundle")) {
@@ -911,6 +1003,8 @@ int64_t JsTask::ParseAfter(napi_env env, napi_value value, int64_t before)
     return ret;
 }
 
+// request.agent.search(filter?): resolves with the tids matching the
+// filter (defaults and leniency per ParseSearch).
 napi_value JsTask::Search(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -950,6 +1044,9 @@ napi_value JsTask::Search(napi_env env, napi_callback_info info)
     return asyncCall.Call(context, "search");
 }
 
+// request.agent.query(tid): resolves with the task's TaskInfo; the output
+// stage always sets withSystem, which adds uid/bundle and clears url/data
+// plus the upload file list in the serialized result (see Convert2JSValue).
 napi_value JsTask::Query(napi_env env, napi_callback_info info)
 {
     int32_t seq = RequestManager::GetInstance()->GetNextSeq();
@@ -1000,6 +1097,8 @@ void JsTask::SetTid(std::string &tid)
     tid_ = tid;
 }
 
+// Subscribes to server SA status notifications; guarded by taskContextMap_
+// occupancy (see AddTaskWhenCreate/RemoveTaskContext).
 void JsTask::SubscribeSA()
 {
     REQUEST_HILOGD("SubscribeSA in");
@@ -1016,6 +1115,8 @@ void JsTask::UnsubscribeSA()
     }
 }
 
+// Re-subscribes every live tid with the (restarted) server SA so their
+// event pushes continue to be delivered to this process.
 void JsTask::ReloadListener()
 {
     REQUEST_HILOGD("ReloadListener in");
@@ -1033,6 +1134,10 @@ void JsTask::ReloadListener()
     }
 }
 
+// Stages certificate files for upload: copies every file found in the
+// given dirs into the fixed sandbox path .ohos/.request/.certs and grants
+// the SA read access to the staged copies; on success the caller's dirs
+// list is replaced with the staging path.
 bool JsTask::SetDirsPermission(std::vector<std::string> &dirs)
 {
     if (dirs.empty()) {
@@ -1072,6 +1177,8 @@ bool JsTask::SetDirsPermission(std::vector<std::string> &dirs)
     return true;
 }
 
+// Releases the read ACLs granted by SetDirsPermission for every file
+// under the staged cert dirs.
 void JsTask::RemoveDirsPermission(const std::vector<std::string> &dirs)
 {
     for (const auto &folderPath : dirs) {
@@ -1084,6 +1191,8 @@ void JsTask::RemoveDirsPermission(const std::vector<std::string> &dirs)
     }
 }
 
+// Deletes the task's body temp files only — no ACL release; used for
+// failure cleanup where the task entry itself stays alive.
 void JsTask::ClearTaskTemp(const std::string &tid)
 {
     std::lock_guard<std::mutex> lockGuard(JsTask::taskMutex_);
@@ -1104,6 +1213,9 @@ void JsTask::ClearTaskTemp(const std::string &tid)
     }
 }
 
+// Full per-task release when the task ends: revoke the bodyFileNames and
+// file ACLs, delete the body temp files, release the cert permissions and
+// mark the task as no longer holding grants.
 void JsTask::ClearTaskThing(const std::string &tid)
 {
     std::lock_guard<std::mutex> lockGuard(JsTask::taskMutex_);
@@ -1131,6 +1243,9 @@ void JsTask::ClearTaskThing(const std::string &tid)
     RemoveDirsPermission(context->task->config_.certsPath);
 }
 
+// Drops a task from the process table: deletes its notify-data listener
+// references, erases the map entry, unsubscribes from SA status when the
+// table empties, and schedules the JS reference cleanup.
 void JsTask::RemoveTaskContext(const std::string &tid)
 {
     std::lock_guard<std::mutex> lockGuard(JsTask::taskMutex_);
@@ -1156,6 +1271,8 @@ void JsTask::RemoveTaskContext(const std::string &tid)
     DeleteContextTaskRef(context);
 }
 
+// JS-thread cleanup helpers of DeleteContextTaskRef: each drops one
+// persistent reference (the JS Task object / the ability context).
 bool JsTask::DeleteTaskRef(ContextCallbackData *data)
 {
     if (data->context->taskRef == nullptr) {
@@ -1233,6 +1350,8 @@ void JsTask::DeleteContextTaskRef(std::shared_ptr<ContextInfo> context)
     return;
 }
 
+// Strict equality of a value against a referenced value; a null ref only
+// matches a null value.
 bool JsTask::Equals(napi_env env, napi_value value, napi_ref copy)
 {
     if (copy == nullptr) {
@@ -1247,6 +1366,10 @@ bool JsTask::Equals(napi_env env, napi_value value, napi_ref copy)
     return isEquals;
 }
 
+// Installs the process-wide foreground-resume callback (AppStateCallback)
+// on the first FOREGROUND task; the callback itself clears register_ when
+// the process no longer holds any foreground task, so a later foreground
+// task can re-register.
 void JsTask::RegisterForegroundResume()
 {
     if (register_) {

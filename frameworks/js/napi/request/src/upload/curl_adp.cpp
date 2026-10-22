@@ -32,6 +32,7 @@
 #include "upload/upload_task.h"
 
 namespace OHOS::Request::Upload {
+// System CA bundle pinned for https uploads.
 static constexpr const char *HTTP_DEFAULT_CA_PATH = "/etc/ssl/certs/cacert.pem";
 CUrlAdp::CUrlAdp(std::vector<FileData> &fileDatas, std::shared_ptr<UploadConfig> &config)
     : timerId_(0), fileDatas_(fileDatas), config_(config), isCurlGlobalInit_(false), curlMulti_(nullptr),
@@ -44,6 +45,10 @@ CUrlAdp::~CUrlAdp()
     UPLOAD_HILOGI(UPLOAD_MODULE_FRAMEWORK, "~CUrlAdp()");
 }
 
+// Sequential per-file loop: each entry is copied into the working
+// mfileData_ (whose adp member pins this adapter for the callbacks),
+// the per-file header slist is freed here after the transfer, and the
+// result is written back into fileDatas_.
 uint32_t CUrlAdp::DoUpload(std::shared_ptr<IUploadTask> task)
 {
     UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "upload start");
@@ -98,6 +103,8 @@ bool CUrlAdp::MultiAddHandle(CURLM *curlMulti, std::vector<CURL *> &curlArray)
     return true;
 }
 
+// Config headers as an slist on mfileData_.list; a default Content-Type
+// is appended when the config supplied none.
 void CUrlAdp::SetHeadData(CURL *curl)
 {
     std::vector<std::string> vec;
@@ -146,6 +153,8 @@ void CUrlAdp::SetConnectionOpt(CURL *curl)
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
 }
 
+// https: pin the CA bundle and the TLS version from the X-TLS-Version
+// header; non-https URLs run with certificate verification disabled.
 void CUrlAdp::SetSslOpt(CURL *curl)
 {
     if (config_->url.find("https") != 0) {
@@ -199,6 +208,8 @@ void CUrlAdp::SetCurlOpt(CURL *curl)
     }
 }
 
+// One part per config data field, then a single "file" part streamed
+// by ReadCallback.
 void CUrlAdp::SetMimePost(CURL *curl)
 {
     curl_mimepart *part;
@@ -226,6 +237,8 @@ void CUrlAdp::SetHttpPut(CURL *curl)
     curl_easy_setopt(curl, CURLOPT_INFILESIZE, mfileData_.totalsize);
 }
 
+// Pumps curl_multi_wait (up to TRANS_TIMEOUT_MS per wait) until the
+// single easy handle finishes.
 int32_t CUrlAdp::UploadOneFile()
 {
     CurlGlobalInit();
@@ -274,6 +287,8 @@ void CUrlAdp::CurlGlobalCleanup()
     }
 }
 
+// Only HTTP 200 counts as success — other 2xx codes fail; curl errors
+// map to UPLOAD_CURLE_SSL_CONNECT_ERROR / UPLOAD_LIB_ERROR.
 int CUrlAdp::CheckUploadStatus(CURLM *curlMulti)
 {
     int msgsLeft = 0;
@@ -350,6 +365,8 @@ bool CUrlAdp::CheckCUrlAdp(FileData *fData)
     return true;
 }
 
+// Keeps upsize current (accounting for libcurl's resume bookkeeping)
+// and mirrors it into the matching fileDatas_ entry.
 int CUrlAdp::ProgressCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
 {
     FileData *fData = static_cast<FileData *>(clientp);
@@ -384,6 +401,8 @@ int CUrlAdp::ProgressCallback(void *clientp, curl_off_t dltotal, curl_off_t dlno
     return 0;
 }
 
+// Buffers header lines; the terminating empty line completes the block
+// and triggers the API5 notification.
 size_t CUrlAdp::HeaderCallback(char *buffer, size_t size, size_t nitems, void *userdata)
 {
     FileData *fData = static_cast<FileData *>(userdata);
@@ -424,6 +443,9 @@ void CUrlAdp::SplitHttpMessage(const std::string &stmp, FileData *&fData)
     }
 }
 
+// Success fires exactly once — on the last file's 200 header block;
+// any other status fires the fail callback with the accumulated
+// headers.
 void CUrlAdp::NotifyAPI5(FileData *fData, std::string &headers)
 {
     if (fData->httpCode == HTTP_SUCCESS) {
@@ -438,6 +460,9 @@ void CUrlAdp::NotifyAPI5(FileData *fData, std::string &headers)
     }
 }
 
+// The read watchdog brackets each fread: a read blocked longer than
+// READFILE_TIMEOUT_MS flips the abort flag and the next callback aborts
+// the transfer.
 size_t CUrlAdp::ReadCallback(char *buffer, size_t size, size_t nitems, void *arg)
 {
     UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "size is %{public}zu, nitems is %{public}zu.", size, nitems);

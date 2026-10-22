@@ -19,6 +19,8 @@
 #include "i_file_adapter.h"
 
 namespace OHOS::Request::Upload {
+// Default IFileAdapter: data ability files via DataAbilityHelper, cache
+// dir from the ability context.
 class FileAdapter : public IFileAdapter {
 public:
     int32_t DataAbilityOpenFile(

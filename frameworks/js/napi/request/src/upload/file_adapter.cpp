@@ -19,6 +19,8 @@
 
 using namespace OHOS::AppExecFwk;
 namespace OHOS::Request::Upload {
+// Read-only fd for the URI's data ability; -1 when the helper cannot be
+// created or the ability refuses to open.
 int32_t FileAdapter::DataAbilityOpenFile(
     const std::string &fileUri, std::shared_ptr<OHOS::AbilityRuntime::Context> &context)
 {
@@ -31,6 +33,7 @@ int32_t FileAdapter::DataAbilityOpenFile(
     return dataAbilityHelper->OpenFile(*uri, "r");
 }
 
+// Root of internal://cache/ URIs: the ability's cache directory.
 std::string FileAdapter::InternalGetFilePath(std::shared_ptr<OHOS::AbilityRuntime::Context> &context)
 {
     return context->GetCacheDir();
