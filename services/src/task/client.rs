@@ -107,6 +107,18 @@ pub(crate) fn build_client(
     // Set socket ownership for proper resource management
     client = client.sockets_owner(config.common_data.uid as u32, config.common_data.uid as u32);
 
+    // DNS server override: the effective server list at client build time,
+    // scoped to the task bundle and the task user - the covering VPN's
+    // servers, otherwise the default network's. An empty list means no
+    // usable source: nothing is passed and resolution fails fast.
+    #[cfg(feature = "oh")]
+    {
+        let dns_servers = crate::utils::get_dns_servers(&config.bundle, config.common_data.uid);
+        if !dns_servers.is_empty() {
+            client = client.dns_servers(dns_servers);
+        }
+    }
+
     // Configure redirect strategy based on task settings
     if config.common_data.redirect {
         // Allow unlimited redirects when explicitly requested

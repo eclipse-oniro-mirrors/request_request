@@ -20,6 +20,7 @@
 pub(crate) mod c_wrapper;
 pub(crate) mod common_event;
 pub(crate) mod form_item;
+pub(crate) mod vpn_dns;
 use std::collections::HashMap;
 use std::future::Future;
 use std::io::Write;
@@ -30,6 +31,8 @@ pub(crate) use common_event::{
     subscribe_common_event, CommonEventSubscriber, Want as CommonEventWant,
 };
 pub(crate) use ffi::PublishStateChangeEvent;
+#[cfg(feature = "oh")]
+pub(crate) use vpn_dns::get_dns_servers;
 
 cfg_oh! {
     pub(crate) mod url_policy;
@@ -513,9 +516,21 @@ pub(crate) fn is_valid_bundle_name(name: &str) -> bool {
 #[allow(unused)]
 #[cxx::bridge(namespace = "OHOS::Request")]
 mod ffi {
+    // One connected vpn's raw config as the vpn service handed it over:
+    // the scope lists that decide which bundles the vpn covers plus the
+    // dns list the covering vpn hands to the resolver. Nothing is
+    // validated here - cleaning happens at the musl-equivalent ingestion
+    // site, not on this side.
+    #[derive(Clone, Debug)]
+    struct VpnScope {
+        accepted: Vec<String>,
+        refused: Vec<String>,
+        dns_servers: Vec<String>,
+    }
 
     unsafe extern "C++" {
         include!("request_utils.h");
+        include!("vpn_dns_resolver.h");
 
         /// Publishes a state change event for a task.
         fn PublishStateChangeEvent(bundleName: &str, taskId: u32, state: i32, uid: i32) -> bool;
@@ -540,6 +555,21 @@ mod ffi {
 
         /// Checks if a token ID belongs to a HarmonyOS Ability Package.
         fn IsCalledByHAP(token_id: u32) -> bool;
+
+        /// Resolves the task's owning OS account from the raw uid via the
+        /// os_account API (the uid-to-account mapping is a system
+        /// allocation policy). Returns -1 when the lookup fails.
+        fn GetOsAccountLocalIdFromUid(uid: u32) -> i32;
+
+        /// Realtime query of the user's connected vpns straight from the
+        /// vpn service, nothing cached: the scope lists and dns lists stay
+        /// raw.
+        fn QueryConnectedVpnScopes(user: i32, vpn_scopes: &mut Vec<VpnScope>);
+
+        /// The default network's DHCP-provided DNS servers: the only
+        /// source on forms without netmanager_ext, and the fallback
+        /// everywhere else.
+        fn GetDefaultNetworkDnsServers(dns_servers: &mut Vec<String>);
     }
 }
 
@@ -552,6 +582,13 @@ mod ffi {
 #[cfg(test)]
 mod ut_mod {
     include!("../../tests/ut/utils/ut_mod.rs");
+}
+
+/// Policy tests are pure Rust: the scope decision and the unique-cover rule
+/// run on host cargo test too, no OH FFI calls involved.
+#[cfg(test)]
+mod ut_vpn_dns {
+    include!("../../tests/ut/utils/ut_vpn_dns.rs");
 }
 
 #[cfg(test)]

@@ -75,6 +75,7 @@ ohos_static_library("download_server_cxx") {
     "src/cxx/request_cert_mgr_adapter.cpp",
     "src/cxx/request_utils.cpp",
     "src/cxx/url_policy.cpp",
+    "src/cxx/vpn_dns_resolver.cpp",
   ]
   sources += get_target_outputs(":download_server_cxx_gen")
 
@@ -133,6 +134,14 @@ ohos_static_library("download_server_cxx") {
       "core_service:tel_core_service_api",
     ]
     defines += [ "REQUEST_TELEPHONY_CORE_SERVICE" ]
+  }
+
+  # netmanager_ext is optional for some product forms: without it the VPN
+  # source compiles out and DNS falls back to the default network only.
+  if (defined(global_parts_info) &&
+      defined(global_parts_info.communication_netmanager_ext)) {
+    external_deps += [ "netmanager_ext:net_vpn_manager_if" ]
+    defines += [ "REQUEST_SUPPORT_NETMANAGER_EXT" ]
   }
 
   if (request_multi_instance) {
