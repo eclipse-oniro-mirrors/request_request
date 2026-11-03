@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task resumption functionality for download tasks.
-//! 
+//!
 //! This module provides methods to resume paused tasks in bulk,
 //! including permission verification, input validation,
 //! and ownership checks before sending resumption events.
@@ -54,7 +54,7 @@ impl RequestServiceStub {
     pub(crate) fn resume(&self, data: &mut MsgParcel, reply: &mut MsgParcel) -> IpcResult<()> {
         // Check for download manager permissions
         let permission = PermissionChecker::check_down_permission();
-        
+
         // Verify internet access permissions
         if !PermissionChecker::check_internet() && !permission {
             error!("Service resume: no INTERNET permission");
@@ -80,10 +80,10 @@ impl RequestServiceStub {
 
         // Get calling UID for ownership verification
         let ipc_uid = ipc::Skeleton::calling_uid();
-        
+
         // Initialize results vector with default error codes
         let mut vec = vec![ErrorCode::Other; len];
-        
+
         // Process each task ID individually
         for i in 0..len {
             let task_id: String = data.read()?;
@@ -105,10 +105,11 @@ impl RequestServiceStub {
             let task_uid = match RequestDb::get_instance().query_task_uid(task_id) {
                 Some(uid) => uid,
                 None => {
+                    // Task doesn't exist or engine error
                     set_code_with_index(&mut vec, i, ErrorCode::TaskNotFound);
                     continue;
                 }
-            };
+                };
 
             // Verify task belongs to the current account
             if !check_current_account(task_uid) {
@@ -126,7 +127,10 @@ impl RequestServiceStub {
                 sys_event!(
                     ExecError,
                     DfxCode::INVALID_IPC_MESSAGE_A12,
-                    &format!("Service resume, failed: check task uid. tid: {}, uid: {}", task_id, ipc_uid)
+                    &format!(
+                        "Service resume, failed: check task uid. tid: {}, uid: {}",
+                        task_id, ipc_uid
+                    )
                 );
                 continue;
             }
@@ -135,11 +139,11 @@ impl RequestServiceStub {
             let (event, rx) = TaskManagerEvent::resume(task_uid, task_id);
             if !self.task_manager.lock().unwrap().send_event(event) {
                 error!("Service resume, failed: task_manager err: {}", task_id);
-                    sys_event!(
-                        ExecError,
-                        DfxCode::INVALID_IPC_MESSAGE_A12,
-                        &format!("Service resume, failed: task_manager err: {}", task_id)
-                    );
+                sys_event!(
+                    ExecError,
+                    DfxCode::INVALID_IPC_MESSAGE_A12,
+                    &format!("Service resume, failed: task_manager err: {}", task_id)
+                );
                 set_code_with_index(&mut vec, i, ErrorCode::Other);
                 continue;
             }
@@ -155,13 +159,16 @@ impl RequestServiceStub {
                     sys_event!(
                         ExecError,
                         DfxCode::INVALID_IPC_MESSAGE_A12,
-                        &format!("Service resume, tid: {}, failed: receives ret failed", task_id)
+                        &format!(
+                            "Service resume, tid: {}, failed: receives ret failed",
+                            task_id
+                        )
                     );
                     set_code_with_index(&mut vec, i, ErrorCode::Other);
                     continue;
                 }
             };
-            
+
             // Store the result and log any failures
             set_code_with_index(&mut vec, i, ret);
             if ret != ErrorCode::ErrOk {
@@ -176,7 +183,7 @@ impl RequestServiceStub {
 
         // Send successful operation status
         reply.write(&(ErrorCode::ErrOk as i32))?;
-        
+
         // Return individual results for each task
         for ret in vec {
             reply.write(&(ret as i32))?;

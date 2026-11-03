@@ -16,6 +16,7 @@
 #ifndef REQUEST_GET_PROXY_H
 #define REQUEST_GET_PROXY_H
 
+#include <shared_mutex>
 #include <string>
 
 #include "c_string_wrapper.h"
@@ -25,6 +26,24 @@
 #include "log.h"
 #include "matching_skills.h"
 #include "want.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Snapshot of the current system proxy, all three fields read under one
+// lock so they always describe the same proxy update.
+struct HttpProxySnapshot {
+    CStringWrapper host;
+    CStringWrapper port;
+    CStringWrapper exclusionList;
+};
+
+HttpProxySnapshot GetHttpProxySnapshot();
+
+#ifdef __cplusplus
+}
+#endif
 
 class SysNetProxySubscriber : public OHOS::EventFwk::CommonEventSubscriber {
 public:
@@ -40,9 +59,6 @@ class SysNetProxyManager {
 public:
     static SysNetProxyManager &GetInstance();
     void SubscriberEvent();
-    CStringWrapper GetHost();
-    CStringWrapper GetPort();
-    CStringWrapper GetExclusionList();
 
     void GetHttpProxy(const std::string proxyContent, std::string &host, std::string &port, std::string &exclusionList);
     void InitProxy(std::string &host, std::string &port, std::string &exclusion);
@@ -62,7 +78,11 @@ private:
     std::string host_;
     std::string port_;
     std::string exclusionList_;
-    std::mutex proxyMutex;
+    std::shared_mutex proxyMutex;
+    // OnReceiveEvent writes proxy fields, GetHttpProxySnapshot builds a
+    // consistent snapshot; both need direct access to the fields and lock.
+    friend class SysNetProxySubscriber;
+    friend HttpProxySnapshot GetHttpProxySnapshot();
 };
 std::shared_ptr<SysNetProxySubscriber> SysNetProxyManager::subscriber_ = nullptr;
 
@@ -71,9 +91,6 @@ extern "C" {
 #endif
 
 void RegisterProxySubscriber();
-CStringWrapper GetHost();
-CStringWrapper GetPort();
-CStringWrapper GetExclusionList();
 
 #ifdef __cplusplus
 }

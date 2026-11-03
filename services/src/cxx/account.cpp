@@ -30,6 +30,11 @@ SubscriberWrapper::SubscriberWrapper(OS_ACCOUNT_SUBSCRIBE_TYPE type, rust::box<T
     rust::fn<void(const int &newId, const int &oldId, const TaskManagerTx &task_manager)> on_accounts_switch)
     : OsAccountSubscriber(OsAccountSubscribeInfo(type, ""))
 {
+    // Ownership note: the boxed task manager is unboxed into a raw pointer
+    // here and reclaimed by the destructor via from_raw. The subscription
+    // must therefore live for the whole process (subscribe once at SA
+    // startup, never unsubscribe/destroy while callbacks can still fire),
+    // otherwise from_raw races with an in-flight account callback.
     task_manager_ = task_manager.into_raw();
     on_accounts_changed_ = on_accounts_changed;
     on_accounts_switch_ = on_accounts_switch;

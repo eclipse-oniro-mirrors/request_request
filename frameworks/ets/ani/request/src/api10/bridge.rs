@@ -54,12 +54,19 @@ impl From<config::Action> for Action {
 }
 
 /// Converts from u8 to Action (0 for Download, 1 for Upload).
+///
+/// Any other value falls back to `Action::Download`, matching the fallback
+/// used by `request_core::config::Action::from`.
 impl From<u8> for Action {
     fn from(value: u8) -> Self {
         match value {
-            0 => Action::Download,
             1 => Action::Upload,
-            _ => unimplemented!(),
+            other => {
+                if other != 0 {
+                    error!("Invalid Action value {}, fallback to Download", other);
+                }
+                Action::Download
+            }
         }
     }
 }
@@ -95,12 +102,19 @@ impl From<config::Mode> for Mode {
 }
 
 /// Converts from u8 to Mode (0 for Background, 1 for Foreground).
+///
+/// Any other value falls back to `Mode::Background`, matching the fallback
+/// used by `request_core::config::Mode::from`.
 impl From<u8> for Mode {
     fn from(value: u8) -> Self {
         match value {
-            0 => Mode::Background,
             1 => Mode::Foreground,
-            _ => unimplemented!(),
+            other => {
+                if other != 0 {
+                    error!("Invalid Mode value {}, fallback to Background", other);
+                }
+                Mode::Background
+            }
         }
     }
 }
@@ -383,10 +397,13 @@ pub enum State {
 }
 
 /// Converts from core State to API State.
+///
+/// `request_core::info::State::Any` (the core-side fallback for unknown raw
+/// values) has no API counterpart; it maps to `State::Initialized`, the most
+/// neutral API state, with an error log.
 impl From<request_core::info::State> for State {
     fn from(value: request_core::info::State) -> Self {
         match value {
-            request_core::info::State::Initialized => State::Initialized,
             request_core::info::State::Waiting => State::Waiting,
             request_core::info::State::Running => State::Running,
             request_core::info::State::Retrying => State::Retrying,
@@ -395,7 +412,12 @@ impl From<request_core::info::State> for State {
             request_core::info::State::Completed => State::Completed,
             request_core::info::State::Failed => State::Failed,
             request_core::info::State::Removed => State::Removed,
-            _ => unimplemented!(),
+            other => {
+                if !matches!(other, request_core::info::State::Initialized) {
+                    error!("Invalid core State {:?}, fallback to Initialized", other);
+                }
+                State::Initialized
+            }
         }
     }
 }
@@ -418,10 +440,12 @@ impl From<State> for request_core::info::State {
 }
 
 /// Converts from u8 to State based on predefined state codes.
+///
+/// Any other value falls back to `State::Initialized`, the most neutral API
+/// state, with an error log.
 impl From<u8> for State {
     fn from(value: u8) -> Self {
         match value {
-            0x00 => State::Initialized,
             0x10 => State::Waiting,
             0x20 => State::Running,
             0x21 => State::Retrying,
@@ -430,7 +454,15 @@ impl From<u8> for State {
             0x40 => State::Completed,
             0x41 => State::Failed,
             0x50 => State::Removed,
-            _ => unimplemented!(),
+            other => {
+                if other != 0x00 {
+                    error!(
+                        "Invalid State value {:#04x}, fallback to Initialized",
+                        other
+                    );
+                }
+                State::Initialized
+            }
         }
     }
 }
@@ -503,10 +535,13 @@ pub enum Faults {
     LowSpeed = 0x90,
 }
 
+/// Converts from core Faults to API Faults.
+///
+/// Any unmapped core value falls back to `Faults::Others`, mirroring the
+/// core-side fallback of `request_core::info::Faults::from`.
 impl From<request_core::info::Faults> for Faults {
     fn from(value: request_core::info::Faults) -> Self {
         match value {
-            request_core::info::Faults::Others => Faults::Others,
             request_core::info::Faults::Disconnected => Faults::Disconnected,
             request_core::info::Faults::Timeout => Faults::Timeout,
             request_core::info::Faults::Protocol => Faults::Protocol,
@@ -517,7 +552,12 @@ impl From<request_core::info::Faults> for Faults {
             request_core::info::Faults::Ssl => Faults::Ssl,
             request_core::info::Faults::Redirect => Faults::Redirect,
             request_core::info::Faults::LowSpeed => Faults::LowSpeed,
-            _ => unimplemented!(),
+            other => {
+                if !matches!(other, request_core::info::Faults::Others) {
+                    error!("Invalid core Faults {:?}, fallback to Others", other);
+                }
+                Faults::Others
+            }
         }
     }
 }

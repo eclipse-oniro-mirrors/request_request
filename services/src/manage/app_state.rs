@@ -73,7 +73,9 @@ impl AppStateListener {
                 });
             });
             // Register callbacks for application state and process death notifications
-            RegisterAPPStateCallback(app_state_change_callback);
+            if !RegisterAPPStateCallback(app_state_change_callback) {
+                error!("register app state callback failed");
+            }
             RegisterProcessDiedCallback(process_died_callback);
         }
     }
@@ -88,7 +90,9 @@ impl AppStateListener {
         // Only register callbacks if initialization is complete
         if ONCE.is_completed() {
             unsafe {
-                RegisterAPPStateCallback(app_state_change_callback);
+                if !RegisterAPPStateCallback(app_state_change_callback) {
+                    error!("register app state callback failed");
+                }
                 RegisterProcessDiedCallback(process_died_callback);
             }
         } else {
@@ -218,7 +222,7 @@ impl CommonEventSubscriber for AppUninstallSubscriber {
 #[cfg(feature = "oh")]
 extern "C" {
     // Registers a callback for application state changes
-    fn RegisterAPPStateCallback(f: extern "C" fn(i32, i32, i32));
+    fn RegisterAPPStateCallback(f: extern "C" fn(i32, i32, i32)) -> bool;
     // Registers a callback for process termination events
     fn RegisterProcessDiedCallback(f: extern "C" fn(i32, i32, i32, CStringWrapper));
 }

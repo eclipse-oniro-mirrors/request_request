@@ -61,6 +61,8 @@ pub enum BundleType {
     AppServiceFwk,
     /// Application plugin bundle
     AppPlugin,
+    /// Skill bundle
+    Skill,
 }
 
 /// Application-level information retrieved from a context.
@@ -72,9 +74,9 @@ pub struct ApplicationInfo {
 impl From<wrapper::BundleType> for BundleType {
     /// Converts from the wrapper's BundleType to this module's BundleType.
     ///
-    /// # Panics
+    /// # Notes
     ///
-    /// Panics if the provided BundleType value does not match any known variant.
+    /// Unknown values are mapped to `BundleType::App` as a safe fallback.
     fn from(value: wrapper::BundleType) -> Self {
         match value {
             wrapper::BundleType::APP => BundleType::App,
@@ -82,7 +84,8 @@ impl From<wrapper::BundleType> for BundleType {
             wrapper::BundleType::SHARED => BundleType::Shared,
             wrapper::BundleType::APP_SERVICE_FWK => BundleType::AppServiceFwk,
             wrapper::BundleType::APP_PLUGIN => BundleType::AppPlugin,
-            _ => unimplemented!(),
+            wrapper::BundleType::SKILL => BundleType::Skill,
+            _ => BundleType::App,
         }
     }
 }

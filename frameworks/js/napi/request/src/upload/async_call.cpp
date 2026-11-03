@@ -106,6 +106,7 @@ void AsyncCall::OnExecute(napi_env env, void *data)
 {
     UPLOAD_HILOGD(UPLOAD_MODULE_JS_NAPI, "run the async runnable");
     AsyncContext *context = reinterpret_cast<AsyncContext *>(data);
+    // The module is built with -fno-exceptions, so Exec cannot throw here.
     context->ctx->Exec();
 }
 

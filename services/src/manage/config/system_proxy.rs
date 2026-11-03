@@ -12,12 +12,23 @@
 // limitations under the License.
 
 //! System proxy configuration management.
-//! 
+//!
 //! This module provides functionality to manage and access system proxy settings
 //! for network requests. It interacts with the underlying system to retrieve proxy
 //! configuration parameters including host, port, and exclusion lists.
 
 use crate::utils::c_wrapper::CStringWrapper;
+
+/// Snapshot of the system proxy read from the C++ side under one lock.
+///
+/// All three fields describe the same proxy update, so callers converting
+/// them to strings see a consistent triple.
+#[repr(C)]
+pub(crate) struct HttpProxySnapshot {
+    pub(crate) host: CStringWrapper,
+    pub(crate) port: CStringWrapper,
+    pub(crate) exclusion_list: CStringWrapper,
+}
 
 /// Manages system proxy settings for network requests.
 ///
@@ -44,45 +55,21 @@ impl SystemProxyManager {
         Self
     }
 
-    /// Retrieves the current proxy host address.
+    /// Takes a consistent snapshot of the current proxy configuration.
+    ///
+    /// The C++ side reads host, port, and exclusion list under one lock, so
+    /// the returned snapshot always describes a single proxy update.
     ///
     /// # Returns
     ///
-    /// A `String` containing the proxy host address, or empty string if no proxy is set.
+    /// An `HttpProxySnapshot` with the current proxy settings.
     ///
     /// # Safety
     ///
-    /// Calls unsafe FFI function `GetHost()` to retrieve the proxy host from the system.
-    pub(crate) fn host(&self) -> String {
-        unsafe { GetHost() }.to_string()
-    }
-
-    /// Retrieves the current proxy port number.
-    ///
-    /// # Returns
-    ///
-    /// A `String` containing the proxy port number, or empty string if no proxy is set.
-    ///
-    /// # Safety
-    ///
-    /// Calls unsafe FFI function `GetPort()` to retrieve the proxy port from the system.
-    pub(crate) fn port(&self) -> String {
-        unsafe { GetPort() }.to_string()
-    }
-
-    /// Retrieves the current proxy exclusion list.
-    ///
-    /// # Returns
-    ///
-    /// A `String` containing domains/hosts that should bypass the proxy, or empty string
-    /// if no exclusions are set.
-    ///
-    /// # Safety
-    ///
-    /// Calls unsafe FFI function `GetExclusionList()` to retrieve the proxy exclusion
-    /// list from the system.
-    pub(crate) fn exlist(&self) -> String {
-        unsafe { GetExclusionList() }.to_string()
+    /// Calls unsafe FFI function `GetHttpProxySnapshot()` to retrieve the
+    /// proxy snapshot from the system.
+    pub(crate) fn snapshot(&self) -> HttpProxySnapshot {
+        unsafe { GetHttpProxySnapshot() }
     }
 }
 
@@ -95,37 +82,16 @@ extern "C" {
     ///
     /// This is an FFI function that interacts with system components.
     pub(crate) fn RegisterProxySubscriber();
-    
-    /// Retrieves the current proxy host address.
+
+    /// Retrieves a consistent snapshot of the current proxy configuration.
     ///
     /// # Returns
     ///
-    /// A `CStringWrapper` containing the proxy host address.
+    /// An `HttpProxySnapshot` containing the proxy host address, port number,
+    /// and exclusion list.
     ///
     /// # Safety
     ///
     /// This is an FFI function that interacts with system components.
-    pub(crate) fn GetHost() -> CStringWrapper;
-    
-    /// Retrieves the current proxy port number.
-    ///
-    /// # Returns
-    ///
-    /// A `CStringWrapper` containing the proxy port number.
-    ///
-    /// # Safety
-    ///
-    /// This is an FFI function that interacts with system components.
-    pub(crate) fn GetPort() -> CStringWrapper;
-    
-    /// Retrieves the current proxy exclusion list.
-    ///
-    /// # Returns
-    ///
-    /// A `CStringWrapper` containing the proxy exclusion list.
-    ///
-    /// # Safety
-    ///
-    /// This is an FFI function that interacts with system components.
-    pub(crate) fn GetExclusionList() -> CStringWrapper;
+    pub(crate) fn GetHttpProxySnapshot() -> HttpProxySnapshot;
 }

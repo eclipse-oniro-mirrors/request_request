@@ -225,7 +225,12 @@ pub fn on_event(
                 })
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
 
     // Register with RequestClient to receive events and store in manager
@@ -376,7 +381,12 @@ pub fn off_event(
                 coll.on_remove.lock().unwrap().retain(|x| *x != callback);
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     Ok(())
 }
@@ -478,7 +488,12 @@ pub fn off_events(env: &AniEnv, this: DownloadTask, event: String) -> Result<(),
                 coll.on_header_receive.lock().unwrap().clear();
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     Ok(())
 }
@@ -569,7 +584,12 @@ pub fn on_event_uploadtask(
                 })
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     RequestClient::get_instance().register_callback(task_id, coll.clone());
     // Store in manager for future callback additions
@@ -622,7 +642,12 @@ pub fn off_event_uploadtask(
                     .unwrap()
                     .retain(|x| *x != callback);
             }
-            _ => unimplemented!(),
+            _ => {
+                return Err(BusinessError::new(
+                    401,
+                    "Parameter verification failed, event parse error".to_string(),
+                ))
+            }
         }
     }
     Ok(())

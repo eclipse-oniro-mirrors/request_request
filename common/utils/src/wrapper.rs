@@ -66,6 +66,7 @@ mod ffi {
         SHARED,
         APP_SERVICE_FWK,
         APP_PLUGIN,
+        SKILL,
     }
 
     // Log type enumeration

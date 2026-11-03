@@ -51,13 +51,16 @@ UrlPolicy::UrlPolicy()
         return;
     }
     REQUEST_HILOGI("Policy so success");
-    this->isInit = true;
     this->checkUrlFunc = reinterpret_cast<CheckUrlFunc>(dlsym(this->libHandle, "CheckUrl"));
     if (this->checkUrlFunc == nullptr) {
         const char *err = dlerror();
         REQUEST_HILOGE("Policy so dlsym CheckUrl failed: %{public}s", err ? err : "unknown");
         return;
     }
+    // Mark initialized only after both the library and the symbol are ready,
+    // so a failed dlsym is retried on the next call instead of poisoning
+    // the state machine.
+    this->isInit = true;
 }
 
 UrlPolicy::~UrlPolicy()

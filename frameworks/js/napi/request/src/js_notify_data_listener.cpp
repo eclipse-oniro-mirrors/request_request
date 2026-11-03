@@ -15,6 +15,7 @@
 
 #include "js_notify_data_listener.h"
 
+#include <atomic>
 #include <numeric>
 
 #include "js_task.h"
@@ -26,6 +27,9 @@
 #include "request_manager.h"
 
 namespace OHOS::Request {
+
+static std::atomic<uint32_t> g_sendEventFailCount{0};
+static std::atomic<uint32_t> g_notifyAllocFailCount{0};
 
 // Registers a JS callback; the first one subscribes this listener with
 // the server (REMOVE listeners never subscribe here — see the note
@@ -253,7 +257,7 @@ void JSNotifyDataListener::OnNotifyDataReceive(const std::shared_ptr<NotifyData>
 {
     NotifyDataPtr *ptr = new (std::nothrow) NotifyDataPtr;
     if (ptr == nullptr) {
-        REQUEST_HILOGE("NotifyDataPtr new failed");
+        REQUEST_HILOGE("NotifyDataPtr new failed, allocFailCount: %{public}u", g_notifyAllocFailCount.fetch_add(1) + 1);
         return;
     }
     ptr->listener = shared_from_this();
@@ -281,7 +285,10 @@ void JSNotifyDataListener::OnNotifyDataReceive(const std::shared_ptr<NotifyData>
         napi_eprio_high,
         "request:download|downloadfile|upload|uploadfile|agent.create");
     if (ret != napi_ok) {
-        REQUEST_HILOGE("napi_send_event failed: %{public}d", ret);
+        REQUEST_HILOGE("napi_send_event failed: %{public}d, sendEventFailCount: %{public}u, tid %{public}d, "
+                       "SubscribeType %{public}d",
+            ret, g_sendEventFailCount.fetch_add(1) + 1, notifyData->taskId,
+            static_cast<int32_t>(notifyData->type));
         delete ptr;
     }
 }
@@ -293,7 +300,7 @@ void JSNotifyDataListener::OnFaultsReceive(const std::shared_ptr<int32_t> &tid,
 {
     ReasonDataPtr *ptr = new (std::nothrow) ReasonDataPtr;
     if (ptr == nullptr) {
-        REQUEST_HILOGE("ReasonDataPtr new failed");
+        REQUEST_HILOGE("ReasonDataPtr new failed, allocFailCount: %{public}u", g_notifyAllocFailCount.fetch_add(1) + 1);
         return;
     }
     ptr->listener = shared_from_this();
@@ -319,7 +326,9 @@ void JSNotifyDataListener::OnFaultsReceive(const std::shared_ptr<int32_t> &tid,
         napi_eprio_high,
         "request:task.on");
     if (ret != napi_ok) {
-        REQUEST_HILOGE("napi_send_event failed: %{public}d", ret);
+        REQUEST_HILOGE("napi_send_event failed: %{public}d, sendEventFailCount: %{public}u, tid %{public}d, "
+                       "SubscribeType %{public}d",
+            ret, g_sendEventFailCount.fetch_add(1) + 1, *(ptr->tid), static_cast<int32_t>(this->type_));
         delete ptr;
     }
 }
@@ -345,7 +354,9 @@ void JSNotifyDataListener::OnWaitReceive(std::int32_t taskId, WaitingReason reas
         napi_eprio_high,
         "request:task.on");
     if (ret != napi_ok) {
-        REQUEST_HILOGE("napi_send_event failed: %{public}d", ret);
+        REQUEST_HILOGE("napi_send_event failed: %{public}d, sendEventFailCount: %{public}u, tid %{public}d, "
+                       "SubscribeType %{public}d",
+            ret, g_sendEventFailCount.fetch_add(1) + 1, taskId, static_cast<int32_t>(this->type_));
     }
 }
 

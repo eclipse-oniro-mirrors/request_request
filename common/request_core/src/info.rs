@@ -107,9 +107,13 @@ pub enum SubscribeType {
 impl From<u32> for SubscribeType {
     /// Converts a u32 value to a `SubscribeType` enum variant.
     ///
-    /// # Panics
+    /// # Notes
     ///
-    /// Panics if the value is not a valid `SubscribeType` variant.
+    /// Any value that doesn't match a defined variant is mapped to
+    /// `SubscribeType::Butt` (the end-of-enum marker) instead of panicking, so
+    /// corrupted or future values read from the wire cannot crash the
+    /// process. This crate has no logging facility, so the fallback is
+    /// silent.
     fn from(value: u32) -> Self {
         match value {
             0 => SubscribeType::Completed,
@@ -122,8 +126,7 @@ impl From<u32> for SubscribeType {
             7 => SubscribeType::Response,
             8 => SubscribeType::FaultOccur,
             9 => SubscribeType::Wait,
-            10 => SubscribeType::Butt,
-            _ => unimplemented!(),
+            _ => SubscribeType::Butt,
         }
     }
 }
@@ -158,6 +161,15 @@ pub enum Faults {
 }
 
 impl From<u32> for Faults {
+    /// Converts a u32 value to a `Faults` enum variant.
+    ///
+    /// # Notes
+    ///
+    /// Any value that doesn't match a defined variant is mapped to
+    /// `Faults::Others` (mirroring `impl From<Reason> for Faults`) instead of
+    /// panicking, so corrupted or future values read from the wire cannot
+    /// crash the process. This crate has no logging facility, so the fallback
+    /// is silent.
     fn from(value: u32) -> Self {
         match value {
             0xFF => Faults::Others,
@@ -171,7 +183,7 @@ impl From<u32> for Faults {
             0x70 => Faults::Ssl,
             0x80 => Faults::Redirect,
             0x90 => Faults::LowSpeed,
-            _ => unimplemented!(),
+            _ => Faults::Others,
         }
     }
 }
@@ -270,6 +282,14 @@ pub enum Reason {
 }
 
 impl From<u32> for Reason {
+    /// Converts a u32 value to a `Reason` enum variant.
+    ///
+    /// # Notes
+    ///
+    /// Any value that doesn't match a defined variant is mapped to
+    /// `Reason::OthersError` instead of panicking, so corrupted or future
+    /// values read from the wire cannot crash the process. This crate has no
+    /// logging facility, so the fallback is silent.
     fn from(value: u32) -> Self {
         match value {
             0 => Reason::ReasonOk,
@@ -304,7 +324,7 @@ impl From<u32> for Reason {
             29 => Reason::AppAccount,
             30 => Reason::NetworkAppAccount,
             31 => Reason::LowSpeed,
-            _ => unimplemented!(),
+            _ => Reason::OthersError,
         }
     }
 }
@@ -343,13 +363,22 @@ pub enum WaitingReason {
 }
 
 impl From<u32> for WaitingReason {
+    /// Converts a u32 value to a `WaitingReason` enum variant.
+    ///
+    /// # Notes
+    ///
+    /// Any value that doesn't match a defined variant is mapped to
+    /// `WaitingReason::TASK_QUEUE_FULL` (the first variant) instead of
+    /// panicking, so a corrupted or future value read from the wire cannot
+    /// crash the process. The write side (service `WaitingCause`) only emits
+    /// values 0-3, so this fallback is defensive only. This crate has no
+    /// logging facility, so the fallback is silent.
     fn from(value: u32) -> Self {
         match value {
-            0x00 => WaitingReason::TASK_QUEUE_FULL,
             0x01 => WaitingReason::NETWORK_NOT_MATCH,
             0x02 => WaitingReason::APP_BACKGROUND,
             0x03 => WaitingReason::USER_INACTIVATED,
-            _ => unimplemented!(),
+            _ => WaitingReason::TASK_QUEUE_FULL,
         }
     }
 }

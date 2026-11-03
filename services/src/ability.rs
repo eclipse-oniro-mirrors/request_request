@@ -168,7 +168,12 @@ impl Ability for RequestAbility {
         }
         self.init(handler);
         const INIT_POLICY: bool = false;
-        let _ = update_policy(INIT_POLICY);
+        let ret = update_policy(INIT_POLICY);
+        if ret != 0 {
+            // Registration failure only degrades on-demand start policy;
+            // log it so the SAMGR error is diagnosable.
+            error!("update on-demand policy failed on start, ret: {}", ret);
+        }
     }
 
     /// Handles the system ability becoming active.

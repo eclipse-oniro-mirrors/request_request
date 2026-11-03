@@ -15,11 +15,15 @@
 
 #include "js_response_listener.h"
 
+#include <atomic>
+
 #include "log.h"
 #include "napi/native_node_api.h"
 #include "request_manager.h"
 
 namespace OHOS::Request {
+
+static std::atomic<uint32_t> g_sendEventFailCount{0};
 
 // Registers a JS callback; the first one also subscribes this listener
 // with the server.
@@ -55,30 +59,34 @@ napi_status JSResponseListener::RemoveListener(napi_value cb)
 // this thread.
 void JSResponseListener::OnResponseReceive(const std::shared_ptr<Response> &response)
 {
+    std::shared_ptr<Response> snapshot;
     {
+        // Copy under the lock, convert and dispatch outside it so UDS
+        // receive-thread re-entries are not blocked by JS-side conversion.
         std::lock_guard<std::mutex> lock(this->responseMutex_);
         this->response_ = response;
+        snapshot = this->response_;
     }
     std::shared_ptr<JSResponseListener> listener = shared_from_this();
     REQUEST_HILOGI("OnResponseReceive, tid: %{public}s", response->taskId.c_str());
     int32_t ret = napi_send_event(
         listener->env_,
-        [listener]() {
-            std::lock_guard<std::mutex> lock(listener->responseMutex_);
+        [listener, snapshot]() {
             napi_handle_scope scope = nullptr;
             napi_status status = napi_open_handle_scope(listener->env_, &scope);
             if (status != napi_ok || scope == nullptr) {
                 REQUEST_HILOGE("OnResponseReceive napi_scope failed");
                 return;
             }
-            napi_value value = NapiUtils::Convert2JSValue(listener->env_, listener->response_);
+            napi_value value = NapiUtils::Convert2JSValue(listener->env_, snapshot);
             listener->OnMessageReceive(&value, 1);
             napi_close_handle_scope(listener->env_, scope);
         },
         napi_eprio_high,
         "request:task.on");
     if (ret != napi_ok) {
-        REQUEST_HILOGE("napi_send_event failed: %{public}d", ret);
+        REQUEST_HILOGE("napi_send_event failed: %{public}d, sendEventFailCount: %{public}u, tid %{public}s", ret,
+            g_sendEventFailCount.fetch_add(1) + 1, response->taskId.c_str());
     }
 }
 

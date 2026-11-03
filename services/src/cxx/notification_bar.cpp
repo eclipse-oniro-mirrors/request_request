@@ -15,6 +15,7 @@
 
 #include "notification_bar.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -404,6 +405,11 @@ void NotificationSubscriber::OnResponse(
     } else if (buttonOption->GetButtonName() == "cancel") {
         this->_taskManager->stop_task(static_cast<uint32_t>(notificationId));
         Notification::NotificationHelper::CancelNotification(notificationId);
+    } else {
+        // The button name is rendered by the system with fixed defaults;
+        // anything else is unexpected and worth logging for diagnosis.
+        REQUEST_HILOGW("OnResponse unmatched button name: %{public}s, notificationId: %{public}d",
+            buttonOption->GetButtonName().c_str(), notificationId);
     }
 };
 
@@ -424,7 +430,15 @@ void NotificationSubscriber::ChangeColorModeCallback(const char *key, const char
 
 void SubscribeNotification(rust::Box<TaskManagerWrapper> taskManager)
 {
+    // SA startup is the only caller, so a second entry means an unexpected
+    // re-subscribe; keep the first subscriber and log instead of silently
+    // swallowing the call (the notification subsystem rejects duplicates).
     static auto subscriber = std::make_unique<NotificationSubscriber>(std::move(taskManager));
+    static std::atomic<bool> subscribed {false};
+    if (subscribed.exchange(true)) {
+        REQUEST_HILOGW("SubscribeNotification called more than once, keep the first subscriber");
+        return;
+    }
     Notification::NotificationHelper::SubscribeLocalLiveViewNotification(*subscriber);
 }
 

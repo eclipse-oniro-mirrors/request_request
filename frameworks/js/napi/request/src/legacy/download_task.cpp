@@ -177,7 +177,8 @@ void DownloadTask::Start()
         isCurlGlobalInited_ = true;
     }
 
-    thread_ = new (std::nothrow) std::thread(&DownloadTask::Run, this);
+    auto self = shared_from_this();
+    thread_ = new (std::nothrow) std::thread([self]() { self->Run(); });
     if (thread_ == nullptr) {
         NotifyDone(false, "create download thread failed");
         return;

@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task pause functionality for request service.
-//! 
+//!
 //! This module implements methods to pause active download/upload tasks with
 //! permission validation, ID verification, and proper error handling.
 //! It supports batch pause operations for multiple tasks in a single call.
@@ -63,7 +63,7 @@ impl RequestServiceStub {
         // Check for download permission to manage tasks across applications
         let permission = PermissionChecker::check_down_permission();
         let version: u32 = data.read()?;
-        
+
         // API9 requires internet permission for task operations
         if Version::from(version as u8) == Version::API9 && !PermissionChecker::check_internet() {
             error!("Service pause: no INTERNET permission");
@@ -109,7 +109,7 @@ impl RequestServiceStub {
             let task_uid = match RequestDb::get_instance().query_task_uid(task_id) {
                 Some(uid) => uid,
                 None => {
-                    // Task doesn't exist
+                    // Task doesn't exist or engine error
                     set_code_with_index(&mut vec, i, ErrorCode::TaskNotFound);
                     continue;
                 }

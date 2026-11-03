@@ -16,7 +16,7 @@
 
 #include <want.h>
 
-#include <mutex>
+#include <shared_mutex>
 
 #include "common_event_data.h"
 #include "common_event_manager.h"
@@ -24,7 +24,6 @@
 #include "log.h"
 #include "net_conn_client.h"
 
-std::mutex g_proxyMutex;
 using namespace OHOS::EventFwk;
 static constexpr const char *DEFAULT_HTTP_PROXY_HOST = "NONE";
 static constexpr const char *DEFAULT_HTTP_PROXY_EXCLUSION_LIST = "NONE";
@@ -35,21 +34,6 @@ SysNetProxyManager &SysNetProxyManager::GetInstance()
     return proxyManager;
 }
 
-CStringWrapper SysNetProxyManager::GetHost()
-{
-    return WrapperCString(host_);
-}
-CStringWrapper SysNetProxyManager::GetPort()
-{
-    REQUEST_HILOGD("SysNetProxyManager::GetPort() is %{public}s", port_.c_str());
-    return WrapperCString(port_);
-}
-CStringWrapper SysNetProxyManager::GetExclusionList()
-{
-    REQUEST_HILOGD("SysNetProxyManager::GetExclusionList() is %{public}s", exclusionList_.c_str());
-    return WrapperCString(exclusionList_);
-}
-
 void SysNetProxyManager::SubscriberEvent()
 {
     REQUEST_HILOGD("SubscriberEvent start.");
@@ -58,8 +42,15 @@ void SysNetProxyManager::SubscriberEvent()
         return;
     }
     {
-        std::lock_guard<std::mutex> lock(proxyMutex);
-        InitProxy(host_, port_, exclusionList_);
+        // Fetch the proxy from the OH network outside the lock (IPC), then
+        // publish it under the lock so snapshot readers never observe a
+        // half-updated triple.
+        std::string host;
+        std::string port;
+        std::string exclusionList;
+        InitProxy(host, port, exclusionList);
+        std::unique_lock<std::shared_mutex> lock(proxyMutex);
+        SetHttpProxy(host, port, exclusionList);
     }
     OHOS::EventFwk::MatchingSkills matchingSkills;
     matchingSkills.AddEvent(OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_HTTP_PROXY_CHANGE);
@@ -115,9 +106,8 @@ void SysNetProxySubscriber::OnReceiveEvent(const OHOS::EventFwk::CommonEventData
     std::string exclusionList;
     const std::string proxyContent = data.GetWant().GetStringParam("HttpProxy");
     SysNetProxyManager::GetInstance().GetHttpProxy(proxyContent, host, port, exclusionList);
-    g_proxyMutex.lock();
+    std::unique_lock<std::shared_mutex> lock(SysNetProxyManager::GetInstance().proxyMutex);
     SysNetProxyManager::GetInstance().SetHttpProxy(host, port, exclusionList);
-    g_proxyMutex.unlock();
 }
 
 void SysNetProxyManager::GetHttpProxy(
@@ -147,17 +137,15 @@ void RegisterProxySubscriber()
     SysNetProxyManager::GetInstance().SubscriberEvent();
 }
 
-CStringWrapper GetHost()
+HttpProxySnapshot GetHttpProxySnapshot()
 {
-    return SysNetProxyManager::GetInstance().GetHost();
-}
-
-CStringWrapper GetPort()
-{
-    return SysNetProxyManager::GetInstance().GetPort();
-}
-
-CStringWrapper GetExclusionList()
-{
-    return SysNetProxyManager::GetInstance().GetExclusionList();
+    SysNetProxyManager &manager = SysNetProxyManager::GetInstance();
+    // Build the whole snapshot under one shared lock so host/port/exclusion
+    // always come from the same proxy update.
+    std::shared_lock<std::shared_mutex> lock(manager.proxyMutex);
+    HttpProxySnapshot snapshot;
+    snapshot.host = WrapperCString(manager.host_);
+    snapshot.port = WrapperCString(manager.port_);
+    snapshot.exclusionList = WrapperCString(manager.exclusionList_);
+    return snapshot;
 }

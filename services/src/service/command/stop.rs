@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task termination functionality for download tasks.
-//! 
+//!
 //! This module provides methods to stop in-progress download tasks,
 //! with validation, permission checking, and bulk operation support.
 
@@ -57,7 +57,7 @@ impl RequestServiceStub {
         info!("Service stop");
         // Check if caller has download permission (needed for privileged operations)
         let permission = PermissionChecker::check_down_permission();
-        
+
         // Read input count and convert to usize
         let len: u32 = data.read()?;
         let len = len as usize;
@@ -71,10 +71,10 @@ impl RequestServiceStub {
 
         // Get caller's UID for permission validation
         let ipc_uid = ipc::Skeleton::calling_uid();
-        
+
         // Pre-allocate results vector with default error values
         let mut vec = vec![ErrorCode::Other; len];
-        
+
         // Process each task individually
         for i in 0..len {
             // Read task ID from input parcel
@@ -97,10 +97,11 @@ impl RequestServiceStub {
             let task_uid = match RequestDb::get_instance().query_task_uid(task_id) {
                 Some(uid) => uid,
                 None => {
+                    // Task doesn't exist or engine error
                     set_code_with_index(&mut vec, i, ErrorCode::TaskNotFound);
                     continue;
                 }
-            };
+                };
 
             // Verify current account matches task owner's account
             if !check_current_account(task_uid) {
@@ -133,7 +134,7 @@ impl RequestServiceStub {
                 set_code_with_index(&mut vec, i, ErrorCode::Other);
                 continue;
             }
-            
+
             // Receive result from task manager
             let ret = match rx.get() {
                 Some(ret) => ret,
@@ -146,10 +147,10 @@ impl RequestServiceStub {
                     continue;
                 }
             };
-            
+
             // Update results with operation status
             set_code_with_index(&mut vec, i, ret);
-            
+
             // Log error if task stop failed
             if ret != ErrorCode::ErrOk {
                 error!("Service stop, tid: {}, failed: {}", task_id, ret as i32);
@@ -163,7 +164,7 @@ impl RequestServiceStub {
 
         // Write overall operation success code
         reply.write(&(ErrorCode::ErrOk as i32))?;
-        
+
         // Serialize each result to reply parcel
         for ret in vec {
             reply.write(&(ret as i32))?;

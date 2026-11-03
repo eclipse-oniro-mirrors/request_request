@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task information retrieval functionality for download tasks.
-//! 
+//!
 //! This module provides methods to query detailed information about tasks,
 //! with permission checking, validation, and bulk operation support.
 
@@ -70,7 +70,7 @@ impl RequestServiceStub {
         let ipc_uid = ipc::Skeleton::calling_uid();
         // Pre-allocate results vector with default error values
         let mut vec = vec![(ErrorCode::Other, TaskInfo::new()); len];
-        
+
         // Process each task individually
         for i in 0..len {
             // Read task ID from input parcel
@@ -93,10 +93,11 @@ impl RequestServiceStub {
             let task_uid = match RequestDb::get_instance().query_task_uid(task_id) {
                 Some(uid) => uid,
                 None => {
+                    // Task doesn't exist or engine error
                     set_code_with_index_other(&mut vec, i, ErrorCode::TaskNotFound);
                     continue;
                 }
-            };
+                };
 
             // Verify current account matches task owner's account
             if !check_current_account(task_uid) {
@@ -143,10 +144,10 @@ impl RequestServiceStub {
                 }
             };
         }
-        
+
         // Write overall operation success code
         reply.write(&(ErrorCode::ErrOk as i32))?;
-        
+
         // Serialize each result to reply parcel
         for (c, info) in vec {
             reply.write(&(c as i32))?;

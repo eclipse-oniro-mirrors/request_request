@@ -19,6 +19,7 @@
 #include <atomic>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 
 #include "legacy/download_task.h"
@@ -63,7 +64,7 @@ private:
     /// Per-task state: the owning task, the target filename, the env and
     /// the pinned JS references (options object, success/fail callbacks).
     struct DownloadDescriptor {
-        DownloadTask *task_{};
+        std::shared_ptr<DownloadTask> task_{};
         std::string filename_;
         napi_env env_{};
         napi_ref this_{};

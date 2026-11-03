@@ -171,6 +171,12 @@ int32_t UpdatePolicy(bool result)
     }
 
     int32_t ret = systemAbilityManager->UpdateOnDemandPolicy(systemAbilityId, policyType, abilityOnDemandEvents);
+    if (ret != ERR_OK) {
+        // Distinguish the raw IPC result from the local -1 used for a null
+        // SAM; the raw value is a SAMGR error the caller can only log.
+        REQUEST_HILOGE("UpdateOnDemandPolicy failed, ret: %{public}d, enableConnectivity: %{public}d", ret,
+            static_cast<int32_t>(result));
+    }
 
     return ret;
 }

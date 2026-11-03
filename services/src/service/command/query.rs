@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task information query functionality for system services.
-//! 
+//!
 //! This module provides methods to query task information in bulk,
 //! including permission verification, input validation, and account checking.
 
@@ -64,7 +64,7 @@ impl RequestServiceStub {
             reply.write(&(ErrorCode::SystemApi as i32))?;
             return Err(IpcStatusCode::Failed);
         }
-        
+
         // Verify manager permissions and retrieve action type
         let permission = PermissionChecker::check_manager();
         let action = match permission.get_action() {
@@ -94,7 +94,7 @@ impl RequestServiceStub {
 
         // Initialize results vector with default error codes and empty task info
         let mut vec = vec![(ErrorCode::Other, TaskInfo::new()); len];
-        
+
         // Process each task ID individually
         for i in 0..len {
             let task_id: String = data.read()?;
@@ -116,10 +116,11 @@ impl RequestServiceStub {
             let task_uid = match RequestDb::get_instance().query_task_uid(task_id) {
                 Some(uid) => uid,
                 None => {
+                    // Task doesn't exist or engine error
                     set_code_with_index_other(&mut vec, i, ErrorCode::TaskNotFound);
                     continue;
                 }
-            };
+                };
 
             // Verify task belongs to the current account
             if !check_current_account(task_uid) {
@@ -147,10 +148,10 @@ impl RequestServiceStub {
                 }
             };
         }
-        
+
         // Send successful operation status
         reply.write(&(ErrorCode::ErrOk as i32))?;
-        
+
         // Return individual results for each task
         for (c, info) in vec {
             reply.write(&(c as i32))?;

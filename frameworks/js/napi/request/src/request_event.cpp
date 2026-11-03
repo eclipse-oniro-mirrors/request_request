@@ -205,6 +205,13 @@ napi_value RequestEvent::SetMaxSpeed(napi_env env, napi_callback_info info)
     return asyncCall.Call(context, execType);
 }
 
+static void HandleListenerFail(napi_env env, JsTask *task, napi_status ret)
+{
+    (void)env;
+    (void)task;
+    REQUEST_HILOGE("listener op failed, ret: %{public}d", static_cast<int32_t>(ret));
+}
+
 // on(type, callback): registers the callback on the task's listener for
 // that SubscribeType — response events on the task's single
 // JSResponseListener, everything else on a per-SubscribeType
@@ -224,18 +231,18 @@ napi_value RequestEvent::On(napi_env env, napi_callback_info info)
     }
 
     if (jsParam.subscribeType == SubscribeType::RESPONSE) {
-        jsParam.task->listenerMutex_.lock();
+        std::lock_guard<std::mutex> lock(jsParam.task->listenerMutex_);
         if (jsParam.task->responseListener_ == nullptr) {
             jsParam.task->responseListener_ = std::make_shared<JSResponseListener>(env, jsParam.task->GetTid());
         }
-        jsParam.task->listenerMutex_.unlock();
         napi_status ret = jsParam.task->responseListener_->AddListener(jsParam.callback);
         if (ret != napi_ok) {
             REQUEST_HILOGE("End task on, seq: %{public}d, failed: AddListener fail code %{public}d", seq, ret);
+            HandleListenerFail(env, jsParam.task, ret);
             return nullptr;
         }
     } else {
-        jsParam.task->listenerMutex_.lock();
+        std::lock_guard<std::mutex> lock(jsParam.task->listenerMutex_);
         auto it = jsParam.task->notifyDataListenerMap_.find(jsParam.subscribeType);
         if (it == jsParam.task->notifyDataListenerMap_.end()) {
             it = jsParam.task->notifyDataListenerMap_
@@ -244,10 +251,10 @@ napi_value RequestEvent::On(napi_env env, napi_callback_info info)
                      .first;
         }
         auto listener = it->second;
-        jsParam.task->listenerMutex_.unlock();
         napi_status ret = listener->AddListener(jsParam.callback);
         if (ret != napi_ok) {
             REQUEST_HILOGE("End task on, seq: %{public}d, failed: AddListener fail code %{public}d", seq, ret);
+            HandleListenerFail(env, jsParam.task, ret);
             return nullptr;
         }
     }
@@ -276,18 +283,18 @@ napi_value RequestEvent::Off(napi_env env, napi_callback_info info)
     }
 
     if (jsParam.subscribeType == SubscribeType::RESPONSE) {
-        jsParam.task->listenerMutex_.lock();
+        std::lock_guard<std::mutex> lock(jsParam.task->listenerMutex_);
         if (jsParam.task->responseListener_ == nullptr) {
             jsParam.task->responseListener_ = std::make_shared<JSResponseListener>(env, jsParam.task->GetTid());
         }
-        jsParam.task->listenerMutex_.unlock();
         napi_status ret = jsParam.task->responseListener_->RemoveListener(jsParam.callback);
         if (ret != napi_ok) {
             REQUEST_HILOGE("End task off, seq: %{public}d, failed: RemoveListener fail code %{public}d", seq, ret);
+            HandleListenerFail(env, jsParam.task, ret);
             return nullptr;
         }
     } else {
-        jsParam.task->listenerMutex_.lock();
+        std::lock_guard<std::mutex> lock(jsParam.task->listenerMutex_);
         auto it = jsParam.task->notifyDataListenerMap_.find(jsParam.subscribeType);
         if (it == jsParam.task->notifyDataListenerMap_.end()) {
             it = jsParam.task->notifyDataListenerMap_
@@ -296,10 +303,10 @@ napi_value RequestEvent::Off(napi_env env, napi_callback_info info)
                      .first;
         }
         auto listener = it->second;
-        jsParam.task->listenerMutex_.unlock();
         napi_status ret = listener->RemoveListener(jsParam.callback);
         if (ret != napi_ok) {
             REQUEST_HILOGE("End task off, seq: %{public}d, failed: RemoveListener fail code %{public}d", seq, ret);
+            HandleListenerFail(env, jsParam.task, ret);
             return nullptr;
         }
     }
@@ -347,15 +354,15 @@ ExceptionError RequestEvent::ParseSetMaxSpeedParameters(
     ExceptionError err = { .code = E_OK };
     size_t argc = NapiUtils::MAX_ARGC;
     napi_value argv[NapiUtils::MAX_ARGC] = { nullptr };
-    if (argc < NapiUtils::ONE_ARG) {
-        err.code = E_PARAMETER_CHECK;
-        err.errInfo = "Missing mandatory parameters, Wrong number of arguments";
-        return err;
-    }
     napi_status status = napi_get_cb_info(env, info, &argc, argv, &self, nullptr);
     if (status != napi_ok) {
         err.code = E_PARAMETER_CHECK;
         err.errInfo = "Parameter verification failed, Failed to obtain parameters";
+        return err;
+    }
+    if (argc < NapiUtils::ONE_ARG) {
+        err.code = E_PARAMETER_CHECK;
+        err.errInfo = "Missing mandatory parameters, Wrong number of arguments";
         return err;
     }
 

@@ -34,6 +34,7 @@
 #include "manage/network.rs.h"
 #include "manage/query.rs.h"
 #include "rdb_errno.h"
+#include "sys_event.h"
 #include "task/config.rs.h"
 #include "task/info.rs.h"
 #include "task/reason.rs.h"
@@ -87,8 +88,19 @@ void RequestDataBase::CheckAndRebuildDataBase(int errCode)
             REQUEST_HILOGE("delete database failed: %{public}d", errCode);
             return;
         }
-        BuildDatabase(path_, encryptStatus_, store_);
+        // Build outside the lock, then swap under the lock so concurrent
+        // readers keep a valid (ref-counted) handle of the old store.
+        std::shared_ptr<OHOS::NativeRdb::RdbStore> newStore;
+        BuildDatabase(path_, encryptStatus_, newStore);
+        std::unique_lock<std::shared_mutex> lock(storeMutex_);
+        store_ = std::move(newStore);
     }
+}
+
+std::shared_ptr<OHOS::NativeRdb::RdbStore> RequestDataBase::AcquireStore()
+{
+    std::shared_lock<std::shared_mutex> lock(storeMutex_);
+    return store_;
 }
 
 RequestDataBase &RequestDataBase::GetInstance(std::string path, bool encryptStatus)
@@ -121,12 +133,13 @@ RequestDataBase &RequestDataBase::GetInstance()
 
 bool RequestDataBase::Insert(const std::string &table, const OHOS::NativeRdb::ValuesBucket &insertValues)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return false;
     }
 
     int64_t outRowId = 0;
-    int ret = store_->Insert(outRowId, table, insertValues);
+    int ret = store->Insert(outRowId, table, insertValues);
     REQUEST_HILOGD("Request databases insert values, ret: %{public}d", ret);
     CheckAndRebuildDataBase(ret);
     return ret == OHOS::NativeRdb::E_OK;
@@ -135,12 +148,13 @@ bool RequestDataBase::Insert(const std::string &table, const OHOS::NativeRdb::Va
 bool RequestDataBase::Update(
     const OHOS::NativeRdb::ValuesBucket values, const OHOS::NativeRdb::AbsRdbPredicates &predicates)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return false;
     }
 
     int changedRows = 0;
-    int ret = store_->Update(changedRows, values, predicates);
+    int ret = store->Update(changedRows, values, predicates);
     REQUEST_HILOGD("Request databases update, changedRows: %{public}d, ret: %{public}d", changedRows, ret);
     CheckAndRebuildDataBase(ret);
     return ret == OHOS::NativeRdb::E_OK;
@@ -149,28 +163,31 @@ bool RequestDataBase::Update(
 std::shared_ptr<OHOS::NativeRdb::ResultSet> RequestDataBase::Query(
     const OHOS::NativeRdb::AbsRdbPredicates &predicates, const std::vector<std::string> &columns)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return nullptr;
     }
-    return store_->QueryByStep(predicates, columns);
+    return store->QueryByStep(predicates, columns);
 }
 
 int RequestDataBase::ExecuteSql(rust::str sql)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return -1;
     }
-    int ret = store_->ExecuteSql(std::string(sql));
+    int ret = store->ExecuteSql(std::string(sql));
     CheckAndRebuildDataBase(ret);
     return ret;
 }
 
 int RequestDataBase::QueryInteger(rust::str sql, rust::vec<rust::i64> &res)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return -1;
     }
-    auto queryRet = store_->QueryByStep(std::string(sql));
+    auto queryRet = store->QueryByStep(std::string(sql));
     if (queryRet == nullptr) {
         REQUEST_HILOGE("Search failed with reason: result set is nullptr");
         return -1;
@@ -190,7 +207,10 @@ int RequestDataBase::QueryInteger(rust::str sql, rust::vec<rust::i64> &res)
             return -1;
         }
         int64_t value = 0;
-        queryRet->GetLong(0, value);
+        if (queryRet->GetLong(0, value) != OHOS::NativeRdb::E_OK) {
+            REQUEST_HILOGE("QueryInteger get long from %{public}d row failed", i);
+            return -1;
+        }
         res.push_back(rust::i64(value));
     }
     return 0;
@@ -198,10 +218,11 @@ int RequestDataBase::QueryInteger(rust::str sql, rust::vec<rust::i64> &res)
 
 int RequestDataBase::QueryText(rust::str sql, rust::vec<rust::String> &res)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return -1;
     }
-    auto queryRet = store_->QuerySql(std::string(sql));
+    auto queryRet = store->QuerySql(std::string(sql));
     if (queryRet == nullptr) {
         REQUEST_HILOGE("Search failed with reason: result set is nullptr");
         return -1;
@@ -220,7 +241,10 @@ int RequestDataBase::QueryText(rust::str sql, rust::vec<rust::String> &res)
             return -1;
         }
         std::string value = "";
-        queryRet->GetString(i, value);
+        if (queryRet->GetString(0, value) != OHOS::NativeRdb::E_OK) {
+            REQUEST_HILOGE("QueryText get string from %{public}d row failed", i);
+            return -1;
+        }
         res.push_back(rust::string(value));
     }
     return 0;
@@ -228,23 +252,45 @@ int RequestDataBase::QueryText(rust::str sql, rust::vec<rust::String> &res)
 
 bool RequestDataBase::Delete(const OHOS::NativeRdb::AbsRdbPredicates &predicates)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return false;
     }
 
     int deletedRows = 0;
-    int ret = store_->Delete(deletedRows, predicates);
+    int ret = store->Delete(deletedRows, predicates);
     REQUEST_HILOGD("Request databases delete rows, rows: %{public}d, ret: %{public}d", ret, deletedRows);
     CheckAndRebuildDataBase(ret);
     return ret == OHOS::NativeRdb::E_OK;
 }
 
+// Reads the five qos columns (task_id, action, mode, state, priority) of
+// the current row into qosInfo; false on a column read failure.
+static bool ReadTaskQosRow(const std::shared_ptr<OHOS::NativeRdb::ResultSet> &set, TaskQosInfo &qosInfo)
+{
+    int taskId = 0;
+    int action = 0;
+    int mode = 0;
+    int state = 0;
+    int priority = 0;
+    if (set->GetInt(0, taskId) != OHOS::NativeRdb::E_OK      // Line 0 is 'task_id'
+        || set->GetInt(1, action) != OHOS::NativeRdb::E_OK   // Line 1 is 'action'
+        || set->GetInt(2, mode) != OHOS::NativeRdb::E_OK     // Line 2 is 'mode'
+        || set->GetInt(3, state) != OHOS::NativeRdb::E_OK    // Line 3 is 'state'
+        || set->GetInt(4, priority) != OHOS::NativeRdb::E_OK) { // Line 4 is 'priority'
+        return false;
+    }
+    qosInfo = TaskQosInfo{ taskId, action, mode, state, priority };
+    return true;
+}
+
 int RequestDataBase::GetAppTaskQosInfos(rust::str sql, rust::vec<TaskQosInfo> &res)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return -1;
     }
-    auto queryRet = store_->QueryByStep(std::string(sql));
+    auto queryRet = store->QueryByStep(std::string(sql));
     int rowCount = 0;
 
     if (queryRet == nullptr) {
@@ -268,27 +314,23 @@ int RequestDataBase::GetAppTaskQosInfos(rust::str sql, rust::vec<TaskQosInfo> &r
             REQUEST_HILOGE("GetRunningTasksArray result set go to %{public}d row failed", i);
             return -1;
         }
-        int taskId;
-        int action;
-        int mode;
-        int state;
-        int priority;
-        queryRet->GetInt(0, taskId);   // Line 0 is 'task_id'
-        queryRet->GetInt(1, action);   // Line 1 is 'action'
-        queryRet->GetInt(2, mode);     // Line 2 is 'mode'
-        queryRet->GetInt(3, state);    // Line 3 is 'state'
-        queryRet->GetInt(4, priority); // Line 4 is 'priority'
-        res.push_back(TaskQosInfo{ taskId, action, mode, state, priority });
+        TaskQosInfo qosInfo;
+        if (!ReadTaskQosRow(queryRet, qosInfo)) {
+            REQUEST_HILOGE("GetRunningTasksArray read qos columns from %{public}d row failed", i);
+            return -1;
+        }
+        res.push_back(qosInfo);
     }
     return 0;
 }
 
 int RequestDataBase::GetTaskQosInfo(rust::str sql, TaskQosInfo &res)
 {
-    if (store_ == nullptr) {
+    auto store = AcquireStore();
+    if (store == nullptr) {
         return -1;
     }
-    auto queryRet = store_->QueryByStep(std::string(sql));
+    auto queryRet = store->QueryByStep(std::string(sql));
     int rowCount = 0;
 
     if (queryRet == nullptr) {
@@ -311,14 +353,26 @@ int RequestDataBase::GetTaskQosInfo(rust::str sql, TaskQosInfo &res)
         REQUEST_HILOGE("GetTaskQosInfo result set go to 0 row failed");
         return -1;
     }
-    int64_t action;
-    int64_t mode;
-    int64_t state;
-    int64_t priority;
-    queryRet->GetLong(0, action);   // Line 0 is 'action'
-    queryRet->GetLong(1, mode);     // Line 1 is 'mode'
-    queryRet->GetLong(2, state);    // Line 2 is 'state'
-    queryRet->GetLong(3, priority); // Line 3 is 'priority'
+    int64_t action = 0;
+    int64_t mode = 0;
+    int64_t state = 0;
+    int64_t priority = 0;
+    if (queryRet->GetLong(0, action) != OHOS::NativeRdb::E_OK) {   // Line 0 is 'action'
+        REQUEST_HILOGE("GetTaskQosInfo get action failed");
+        return -1;
+    }
+    if (queryRet->GetLong(1, mode) != OHOS::NativeRdb::E_OK) {     // Line 1 is 'mode'
+        REQUEST_HILOGE("GetTaskQosInfo get mode failed");
+        return -1;
+    }
+    if (queryRet->GetLong(2, state) != OHOS::NativeRdb::E_OK) {    // Line 2 is 'state'
+        REQUEST_HILOGE("GetTaskQosInfo get state failed");
+        return -1;
+    }
+    if (queryRet->GetLong(3, priority) != OHOS::NativeRdb::E_OK) { // Line 3 is 'priority'
+        REQUEST_HILOGE("GetTaskQosInfo get priority failed");
+        return -1;
+    }
     res.action = static_cast<uint8_t>(action);
     res.mode = static_cast<uint8_t>(mode);
     res.state = static_cast<uint8_t>(state);
@@ -608,22 +662,39 @@ int RequestDBUpgradeFrom51(OHOS::NativeRdb::RdbStore &store)
     return OHOS::NativeRdb::E_OK;
 }
 // This function is used to adapt beta version, remove it later.
+// ALTER failures are only logged, never propagated: an OnOpen failure would
+// make BuildDatabase drop and recreate the store, losing all history tasks.
 void RequestDBUpgradeFrom60(OHOS::NativeRdb::RdbStore &store)
 {
     if (!ColumnExists(store, REQUEST_TASK_TABLE_COL_MIN_SPEED)) {
-        store.ExecuteSql(REQUEST_TASK_TABLE_ADD_MIN_SPEED);
+        int ret = store.ExecuteSql(REQUEST_TASK_TABLE_ADD_MIN_SPEED);
+        if (ret != OHOS::NativeRdb::E_OK) {
+            REQUEST_HILOGE("add min speed failed, ret: %{public}d", ret);
+        }
     }
     if (!ColumnExists(store, REQUEST_TASK_TABLE_COL_MIN_SPEED_DURATION)) {
-        store.ExecuteSql(REQUEST_TASK_TABLE_ADD_MIN_SPEED_DURATION);
+        int ret = store.ExecuteSql(REQUEST_TASK_TABLE_ADD_MIN_SPEED_DURATION);
+        if (ret != OHOS::NativeRdb::E_OK) {
+            REQUEST_HILOGE("add min speed duration failed, ret: %{public}d", ret);
+        }
     }
     if (!ColumnExists(store, REQUEST_TASK_TABLE_COL_CONNECTION_TIMEOUT)) {
-        store.ExecuteSql(REQUEST_TASK_TABLE_ADD_CONNECTION_TIMEOUT);
+        int ret = store.ExecuteSql(REQUEST_TASK_TABLE_ADD_CONNECTION_TIMEOUT);
+        if (ret != OHOS::NativeRdb::E_OK) {
+            REQUEST_HILOGE("add connection timeout failed, ret: %{public}d", ret);
+        }
     }
     if (!ColumnExists(store, REQUEST_TASK_TABLE_COL_TOTAL_TIMEOUT)) {
-        store.ExecuteSql(REQUEST_TASK_TABLE_ADD_TOTAL_TIMEOUT);
+        int ret = store.ExecuteSql(REQUEST_TASK_TABLE_ADD_TOTAL_TIMEOUT);
+        if (ret != OHOS::NativeRdb::E_OK) {
+            REQUEST_HILOGE("add total timeout failed, ret: %{public}d", ret);
+        }
     }
     if (!ColumnExists(store, REQUEST_TASK_TABLE_COL_TASK_TIME)) {
-        store.ExecuteSql(REQUEST_TASK_TABLE_ADD_TASK_TIME);
+        int ret = store.ExecuteSql(REQUEST_TASK_TABLE_ADD_TASK_TIME);
+        if (ret != OHOS::NativeRdb::E_OK) {
+            REQUEST_HILOGE("add task_time failed, ret: %{public}d", ret);
+        }
     }
 }
 
@@ -707,6 +778,8 @@ void RequestDBUpdateInvalidRecords(OHOS::NativeRdb::RdbStore &store)
 
     if (store.Update(changedRows, values, rdbPredicates) != OHOS::NativeRdb::E_OK) {
         REQUEST_HILOGE("Updates all invalid task to `FAILED` state failed");
+        SysEventLog::SendSysEventLog(FAULT_EVENT, RDB_FAULT_05,
+            "UpdateInvalidRecords update invalid task to failed state failed");
         return;
     }
     REQUEST_HILOGI("Updates all invalid task to `FAILED` state success");
@@ -911,64 +984,95 @@ bool WriteMutableData(OHOS::NativeRdb::ValuesBucket &insertValues, CTaskInfo *ta
     return true;
 }
 
-inline int64_t GetLong(std::shared_ptr<OHOS::NativeRdb::ResultSet> resultSet, int line)
+inline bool GetLong(std::shared_ptr<OHOS::NativeRdb::ResultSet> resultSet, int line, int64_t &value)
 {
-    int64_t value = 0;
-    resultSet->GetLong(line, value);
-    return value;
+    value = 0;
+    return resultSet->GetLong(line, value) == OHOS::NativeRdb::E_OK;
 }
 
-inline int GetInt(std::shared_ptr<OHOS::NativeRdb::ResultSet> resultSet, int line)
+inline bool GetInt(std::shared_ptr<OHOS::NativeRdb::ResultSet> resultSet, int line, int &value)
 {
-    int value = 0;
-    resultSet->GetInt(line, value);
-    return value;
+    value = 0;
+    return resultSet->GetInt(line, value) == OHOS::NativeRdb::E_OK;
 }
 
-void FillCommonTaskInfo(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskInfo &info)
+inline bool GetString(std::shared_ptr<OHOS::NativeRdb::ResultSet> resultSet, int line, std::string &value)
 {
-    info.commonData.taskId = static_cast<uint32_t>(GetLong(set, 0));    // Line 0 is 'task_id'
-    info.commonData.uid = static_cast<uint64_t>(GetLong(set, 1));       // Line 1 is 'uid'
-    info.commonData.action = static_cast<uint8_t>(GetInt(set, 2));      // Line 2 is 'action'
-    info.commonData.mode = static_cast<uint8_t>(GetInt(set, 3));        // Line 3 is 'mode'
-    info.commonData.ctime = static_cast<uint64_t>(GetLong(set, 4));     // Line 4 is 'ctime'
-    info.commonData.mtime = static_cast<uint64_t>(GetLong(set, 5));     // Line 5 is 'mtime'
-    info.commonData.reason = static_cast<uint8_t>(GetInt(set, 6));      // Line 6 is 'reason'
-    info.commonData.gauge = static_cast<bool>(GetInt(set, 7));          // Line 7 is 'gauge'
-    info.commonData.retry = static_cast<bool>(GetInt(set, 8));          // Line 8 is 'retry'
-    info.commonData.tries = static_cast<uint64_t>(GetLong(set, 9));     // Line 9 is 'tries'
-    info.commonData.version = static_cast<uint8_t>(GetLong(set, 10));   // Line 10 is 'version'
-    info.commonData.priority = static_cast<uint32_t>(GetLong(set, 11)); // Line 11 is 'priority'
+    return resultSet->GetString(line, value) == OHOS::NativeRdb::E_OK;
 }
 
-void FillOtherTaskInfo(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskInfo &info)
+inline bool GetBlob(std::shared_ptr<OHOS::NativeRdb::ResultSet> resultSet, int line, std::vector<uint8_t> &value)
 {
-    set->GetString(12, info.bundle);      // Line 12 is 'bundle'
-    set->GetString(13, info.url);         // Line 13 is 'url'
-    set->GetString(14, info.data);        // Line 14 is 'data'
-    set->GetString(15, info.token);       // Line 15 is 'token'
-    set->GetString(16, info.title);       // Line 16 is 'title'
-    set->GetString(17, info.description); // Line 17 is 'description'
-    set->GetString(18, info.mimeType);    // Line 18 is 'mime_type'
+    return resultSet->GetBlob(line, value) == OHOS::NativeRdb::E_OK;
+}
 
-    info.progress.commonData.state = static_cast<uint8_t>(GetInt(set, 19));  // Line 19 here is 'state'
-    info.progress.commonData.index = static_cast<uint8_t>(GetLong(set, 20)); // Line 20 here is 'idx'
-    uintptr_t totalProcessed = static_cast<uintptr_t>(GetLong(set, 21));     // Line 21 is 'totalProcessed'
-    info.progress.commonData.totalProcessed = totalProcessed;
+// Column readers that also narrow the fetched value into the destination
+// type, so a Fill*/Build* function can chain them with &&; a failed read
+// leaves the destination untouched and makes the whole chain false.
+template<typename T>
+inline bool GetLongAs(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, int line, T &value)
+{
+    int64_t longValue = 0;
+    if (!GetLong(set, line, longValue)) {
+        return false;
+    }
+    value = static_cast<T>(longValue);
+    return true;
+}
 
-    set->GetString(22, info.progress.sizes);     // Line 22 here is 'sizes'
-    set->GetString(23, info.progress.processed); // Line 23 here is 'processed'
-    set->GetString(24, info.progress.extras);    // Line 24 here is 'extras'
+template<typename T>
+inline bool GetIntAs(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, int line, T &value)
+{
+    int intValue = 0;
+    if (!GetInt(set, line, intValue)) {
+        return false;
+    }
+    value = static_cast<T>(intValue);
+    return true;
+}
 
+bool FillCommonTaskInfo(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskInfo &info)
+{
+    return GetLongAs(set, 0, info.commonData.taskId)     // Line 0 is 'task_id'
+        && GetLongAs(set, 1, info.commonData.uid)        // Line 1 is 'uid'
+        && GetIntAs(set, 2, info.commonData.action)      // Line 2 is 'action'
+        && GetIntAs(set, 3, info.commonData.mode)        // Line 3 is 'mode'
+        && GetLongAs(set, 4, info.commonData.ctime)      // Line 4 is 'ctime'
+        && GetLongAs(set, 5, info.commonData.mtime)      // Line 5 is 'mtime'
+        && GetIntAs(set, 6, info.commonData.reason)      // Line 6 is 'reason'
+        && GetIntAs(set, 7, info.commonData.gauge)       // Line 7 is 'gauge'
+        && GetIntAs(set, 8, info.commonData.retry)       // Line 8 is 'retry'
+        && GetLongAs(set, 9, info.commonData.tries)      // Line 9 is 'tries'
+        && GetLongAs(set, 10, info.commonData.version)   // Line 10 is 'version'
+        && GetLongAs(set, 11, info.commonData.priority); // Line 11 is 'priority'
+}
+
+bool FillOtherTaskInfo(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskInfo &info)
+{
     std::vector<uint8_t> formItemsBlob;
     std::vector<uint8_t> formSpecsBlob;
-
-    set->GetBlob(25, formItemsBlob); // Line 25 is 'form_items'
+    if (!GetString(set, 12, info.bundle)              // Line 12 is 'bundle'
+        || !GetString(set, 13, info.url)              // Line 13 is 'url'
+        || !GetString(set, 14, info.data)             // Line 14 is 'data'
+        || !GetString(set, 15, info.token)            // Line 15 is 'token'
+        || !GetString(set, 16, info.title)            // Line 16 is 'title'
+        || !GetString(set, 17, info.description)      // Line 17 is 'description'
+        || !GetString(set, 18, info.mimeType)         // Line 18 is 'mime_type'
+        || !GetIntAs(set, 19, info.progress.commonData.state) // Line 19 is 'state'
+        || !GetLongAs(set, 20, info.progress.commonData.index) // Line 20 is 'idx'
+        || !GetLongAs(set, 21, info.progress.commonData.totalProcessed) // Line 21 is 'totalProcessed'
+        || !GetString(set, 22, info.progress.sizes)   // Line 22 is 'sizes'
+        || !GetString(set, 23, info.progress.processed) // Line 23 is 'processed'
+        || !GetString(set, 24, info.progress.extras)  // Line 24 is 'extras'
+        || !GetBlob(set, 25, formItemsBlob)           // Line 25 is 'form_items'
+        || !GetBlob(set, 26, formSpecsBlob)           // Line 26 is 'file_specs'
+        || !GetLongAs(set, 27, info.maxSpeed)         // Line 27 is 'max_speed'
+        || !GetLongAs(set, 28, info.taskTime)) {      // Line 28 is 'task_time'
+        return false;
+    }
     info.formItems = VecToFormItem(BlobToCFormItem(formItemsBlob));
-    set->GetBlob(26, formSpecsBlob); // Line 26 is 'file_specs'
     info.fileSpecs = VecToFileSpec(BlobToCFileSpec(formSpecsBlob));
-    set->GetLong(27, info.maxSpeed); // Line 27 is 'max_speed'
-    info.taskTime = static_cast<uint64_t>(GetLong(set, 28)); //  line 28 is 'task_time'
+    return true;
 }
 
 CProgress BuildCProgress(const Progress &progress)
@@ -1019,82 +1123,112 @@ CTaskInfo *BuildCTaskInfo(const TaskInfo &taskInfo)
     return cTaskInfo;
 }
 
-void BuildRequestTaskConfigWithLong(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskConfig &config)
+bool BuildRequestTaskConfigWithLong(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskConfig &config)
 {
-    config.commonData.taskId = static_cast<uint32_t>(GetLong(set, 0));    // Line 0 is 'task_id'
-    config.commonData.uid = static_cast<uint64_t>(GetLong(set, 1));       // Line 1 is 'uid'
-    config.commonData.tokenId = static_cast<uint64_t>(GetLong(set, 2));   // Line 2 is 'token_id'
-    config.commonData.index = static_cast<uint32_t>(GetLong(set, 11));    // Line 11 is 'config_idx'
-    config.commonData.begins = static_cast<uint64_t>(GetLong(set, 12));   // Line 12 is 'begins'
-    config.commonData.ends = static_cast<int64_t>(GetLong(set, 13));      // Line 13 is 'ends'
-    config.commonData.priority = static_cast<uint32_t>(GetLong(set, 16)); // Line 16 is 'priority'
+    return GetLongAs(set, 0, config.commonData.taskId)   // Line 0 is 'task_id'
+        && GetLongAs(set, 1, config.commonData.uid)      // Line 1 is 'uid'
+        && GetLongAs(set, 2, config.commonData.tokenId)  // Line 2 is 'token_id'
+        && GetLongAs(set, 11, config.commonData.index)   // Line 11 is 'config_idx'
+        && GetLongAs(set, 12, config.commonData.begins)  // Line 12 is 'begins'
+        && GetLongAs(set, 13, config.commonData.ends)    // Line 13 is 'ends'
+        && GetLongAs(set, 16, config.commonData.priority); // Line 16 is 'priority'
 }
 
-void BuildRequestTaskConfigWithInt(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskConfig &config)
+bool BuildRequestTaskConfigWithInt(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskConfig &config)
 {
-    config.commonData.action = static_cast<uint8_t>(GetInt(set, 3));   // Line 3 is 'action'
-    config.commonData.mode = static_cast<uint8_t>(GetInt(set, 4));     // Line 4 is 'mode'
-    config.commonData.cover = static_cast<bool>(GetInt(set, 5));       // Line 5 is 'cover'
-    config.commonData.network = static_cast<uint8_t>(GetInt(set, 6));  // Line 6 is 'network'
-    config.commonData.metered = static_cast<bool>(GetInt(set, 7));     // Line 7 is 'metered'
-    config.commonData.roaming = static_cast<bool>(GetInt(set, 8));     // Line 8 is 'roaming'
-    config.commonData.retry = static_cast<bool>(GetInt(set, 9));       // Line 9 is 'retry'
-    config.commonData.redirect = static_cast<bool>(GetInt(set, 10));   // Line 10 is 'redirect'
-    config.commonData.gauge = static_cast<bool>(GetInt(set, 14));      // Line 14 is 'gauge'
-    config.commonData.precise = static_cast<bool>(GetInt(set, 15));    // Line 15 is 'precise'
-    config.commonData.background = static_cast<bool>(GetInt(set, 17)); // Line 17 is 'background'
-    config.version = static_cast<uint8_t>(GetInt(set, 27));            // Line 27 is 'version'
-    config.bundleType = static_cast<uint8_t>(GetInt(set, 34));         // Line 34 is 'bundle_type'
-    config.commonData.multipart = static_cast<bool>(GetInt(set, 36));  // Line 36 is 'multipart'
-    config.commonData.minSpeed.speed = GetLong(set, 37);               // Line 37 is 'min_speed'
-    config.commonData.minSpeed.duration = GetLong(set, 38);            // Line 38 is 'min_speed_duration'
-    // Line 39 is 'connectionTimeout'
-    config.commonData.timeout.connectionTimeout = static_cast<uint64_t>(GetLong(set, 39));
-    // Line 40 is 'totalTimeout'
-    config.commonData.timeout.totalTimeout = static_cast<uint64_t>(GetLong(set, 40));
+    return GetIntAs(set, 3, config.commonData.action)    // Line 3 is 'action'
+        && GetIntAs(set, 4, config.commonData.mode)      // Line 4 is 'mode'
+        && GetIntAs(set, 5, config.commonData.cover)     // Line 5 is 'cover'
+        && GetIntAs(set, 6, config.commonData.network)   // Line 6 is 'network'
+        && GetIntAs(set, 7, config.commonData.metered)   // Line 7 is 'metered'
+        && GetIntAs(set, 8, config.commonData.roaming)   // Line 8 is 'roaming'
+        && GetIntAs(set, 9, config.commonData.retry)     // Line 9 is 'retry'
+        && GetIntAs(set, 10, config.commonData.redirect) // Line 10 is 'redirect'
+        && GetIntAs(set, 14, config.commonData.gauge)    // Line 14 is 'gauge'
+        && GetIntAs(set, 15, config.commonData.precise)  // Line 15 is 'precise'
+        && GetIntAs(set, 17, config.commonData.background) // Line 17 is 'background'
+        && GetIntAs(set, 27, config.version)             // Line 27 is 'version'
+        && GetIntAs(set, 34, config.bundleType)          // Line 34 is 'bundle_type'
+        && GetIntAs(set, 36, config.commonData.multipart) // Line 36 is 'multipart'
+        && GetLong(set, 37, config.commonData.minSpeed.speed) // Line 37 is 'min_speed'
+        && GetLong(set, 38, config.commonData.minSpeed.duration) // Line 38 is 'min_speed_duration'
+        && GetLongAs(set, 39, config.commonData.timeout.connectionTimeout) // Line 39 is 'connectionTimeout'
+        && GetLongAs(set, 40, config.commonData.timeout.totalTimeout); // Line 40 is 'totalTimeout'
 }
 
-void BuildRequestTaskConfigWithString(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskConfig &config)
+bool BuildRequestTaskConfigWithString(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskConfig &config)
 {
-    set->GetString(18, config.bundle);          // Line 18 is 'bundle'
-    set->GetString(19, config.url);             // Line 19 is 'url'
-    set->GetString(20, config.title);           // Line 20 is 'title'
-    set->GetString(21, config.description);     // Line 21 is 'description'
-    set->GetString(22, config.method);          // Line 22 is 'method'
-    set->GetString(23, config.headers);         // Line 23 is 'headers'
-    set->GetString(24, config.data);            // Line 24 is 'data'
-    set->GetString(25, config.token);           // Line 25 is 'token'
-    set->GetString(26, config.extras);          // Line 26 is 'config_extras'
-    set->GetString(32, config.proxy);           // Line 32 is 'proxy'
-    set->GetString(33, config.certificatePins); // Line 33 is 'certificate_pins'
-    set->GetString(35, config.atomicAccount);   // Line 35 is 'atomic_account'
+    if (!GetString(set, 18, config.bundle)) {          // Line 18 is 'bundle'
+        return false;
+    }
+    if (!GetString(set, 19, config.url)) {             // Line 19 is 'url'
+        return false;
+    }
+    if (!GetString(set, 20, config.title)) {           // Line 20 is 'title'
+        return false;
+    }
+    if (!GetString(set, 21, config.description)) {    // Line 21 is 'description'
+        return false;
+    }
+    if (!GetString(set, 22, config.method)) {          // Line 22 is 'method'
+        return false;
+    }
+    if (!GetString(set, 23, config.headers)) {         // Line 23 is 'headers'
+        return false;
+    }
+    if (!GetString(set, 24, config.data)) {            // Line 24 is 'data'
+        return false;
+    }
+    if (!GetString(set, 25, config.token)) {           // Line 25 is 'token'
+        return false;
+    }
+    if (!GetString(set, 26, config.extras)) {          // Line 26 is 'config_extras'
+        return false;
+    }
+    if (!GetString(set, 32, config.proxy)) {           // Line 32 is 'proxy'
+        return false;
+    }
+    if (!GetString(set, 33, config.certificatePins)) { // Line 33 is 'certificate_pins'
+        return false;
+    }
+    if (!GetString(set, 35, config.atomicAccount)) {   // Line 35 is 'atomic_account'
+        return false;
+    }
+    return true;
 }
 
-void BuildRequestTaskConfigWithBlob(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskConfig &config)
+bool BuildRequestTaskConfigWithBlob(std::shared_ptr<OHOS::NativeRdb::ResultSet> set, TaskConfig &config)
 {
     std::vector<uint8_t> formItemsBlob;
     std::vector<uint8_t> formSpecsBlob;
     std::vector<uint8_t> bodyFileNamesBlob;
     std::vector<uint8_t> certsPathsBlob;
 
-    set->GetBlob(28, formItemsBlob); // Line 28 is 'form_items'
+    if (!GetBlob(set, 28, formItemsBlob)) { // Line 28 is 'form_items'
+        return false;
+    }
     config.formItems = VecToFormItem(BlobToCFormItem(formItemsBlob));
-    set->GetBlob(29, formSpecsBlob); // Line 29 is 'file_specs'
+    if (!GetBlob(set, 29, formSpecsBlob)) { // Line 29 is 'file_specs'
+        return false;
+    }
     config.fileSpecs = VecToFileSpec(BlobToCFileSpec(formSpecsBlob));
-    set->GetBlob(30, bodyFileNamesBlob); // Line 30 is 'body_file_names'
+    if (!GetBlob(set, 30, bodyFileNamesBlob)) { // Line 30 is 'body_file_names'
+        return false;
+    }
     config.bodyFileNames = BlobToStringVec(bodyFileNamesBlob);
-    set->GetBlob(31, certsPathsBlob); // Line 31 is 'certs_paths'
+    if (!GetBlob(set, 31, certsPathsBlob)) { // Line 31 is 'certs_paths'
+        return false;
+    }
     config.certsPath = BlobToStringVec(certsPathsBlob);
+    return true;
 }
 
-TaskConfig BuildRequestTaskConfig(std::shared_ptr<OHOS::NativeRdb::ResultSet> resultSet)
+bool BuildRequestTaskConfig(std::shared_ptr<OHOS::NativeRdb::ResultSet> resultSet, TaskConfig &config)
 {
-    TaskConfig taskConfig;
-    BuildRequestTaskConfigWithLong(resultSet, taskConfig);
-    BuildRequestTaskConfigWithInt(resultSet, taskConfig);
-    BuildRequestTaskConfigWithString(resultSet, taskConfig);
-    BuildRequestTaskConfigWithBlob(resultSet, taskConfig);
-    return taskConfig;
+    return BuildRequestTaskConfigWithLong(resultSet, config)
+        && BuildRequestTaskConfigWithInt(resultSet, config)
+        && BuildRequestTaskConfigWithString(resultSet, config)
+        && BuildRequestTaskConfigWithBlob(resultSet, config);
 }
 } // anonymous namespace
 
@@ -1233,8 +1367,11 @@ int GetTaskInfoInner(const OHOS::NativeRdb::RdbPredicates &rdbPredicates, TaskIn
         REQUEST_HILOGE("result set is nullptr or go to first row failed");
         return OHOS::Request::QUERY_ERR;
     }
-    FillCommonTaskInfo(resultSet, taskInfo);
-    FillOtherTaskInfo(resultSet, taskInfo);
+    if (!FillCommonTaskInfo(resultSet, taskInfo) || !FillOtherTaskInfo(resultSet, taskInfo)) {
+        REQUEST_HILOGE("fill task info from result set failed");
+        resultSet->Close();
+        return OHOS::Request::QUERY_ERR;
+    }
     resultSet->Close();
     return OHOS::Request::QUERY_OK;
 }
@@ -1342,7 +1479,12 @@ CTaskConfig *QueryTaskConfig(uint32_t taskId)
         return nullptr;
     }
 
-    TaskConfig taskConfig = BuildRequestTaskConfig(resultSet);
+    TaskConfig taskConfig;
+    if (!BuildRequestTaskConfig(resultSet, taskConfig)) {
+        REQUEST_HILOGE("QuerySingleTaskConfig failed: build task config from result set failed, task_id: %{public}u",
+            taskId);
+        return nullptr;
+    }
     REQUEST_HILOGD(
         "QuerySingleTaskConfig in, after BuildRequestTaskConfig, task_id: %{public}u", taskConfig.commonData.taskId);
     CTaskConfig *cTaskConfig = new CTaskConfig;

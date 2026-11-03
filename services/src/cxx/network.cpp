@@ -49,6 +49,12 @@ RequestNetCallbackStub::RequestNetCallbackStub(
 
 )
 {
+    // Ownership note: the boxed values are unboxed into raw pointers here and
+    // reclaimed by the destructor via from_raw. The registration lifetime
+    // must therefore span the whole process: this stub is subscribed with
+    // the network manager at SA startup and must never be destroyed while
+    // callbacks can still fire, otherwise from_raw races with the manager's
+    // in-flight callback.
     networkNotifier_ = network.into_raw();
     task_manager_ = task_manager.into_raw();
     notifyTaskManagerOnline_ = notifyTaskManagerOnline;

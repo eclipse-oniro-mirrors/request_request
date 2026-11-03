@@ -89,7 +89,7 @@ pub fn check_config(
                 }
                 _ => "Invalid file or file system error.".to_string(),
             };
-            return Err(BusinessError::new(13400001, message))
+            return Err(BusinessError::new(13400001, message));
         }
         Err(CreateTaskError::Code(code)) => {
             return Err(BusinessError::new(code, "Download failed.".to_string()))
@@ -175,7 +175,7 @@ pub fn download_file(
                 }
                 _ => "Invalid file or file system error.".to_string(),
             };
-            return Err(BusinessError::new(13400001, message))
+            return Err(BusinessError::new(13400001, message));
         }
         Err(CreateTaskError::Code(code)) => {
             return Err(BusinessError::new(code, "Download failed.".to_string()))
@@ -233,9 +233,24 @@ pub fn delete(this: DownloadTask) -> Result<bool, BusinessError> {
     let task_id = this.task_id.parse().unwrap();
     match RequestClient::get_instance().remove(task_id) {
         Err(e) if e == ExceptionErrorCode::E_PERMISSION as i32 => {
-            return Err(BusinessError::new(e, "Failed to delete download task".to_string()));
+            error!(
+                "delete download task failed, task_id: {}, err: {}",
+                task_id, e
+            );
+            return Err(BusinessError::new(
+                e,
+                "Failed to delete download task".to_string(),
+            ));
         }
-        _ => {}
+        Err(e) => {
+            // Non-permission failures keep the legacy true result for
+            // compatibility; only log them for diagnosis.
+            error!(
+                "delete download task failed, task_id: {}, err: {}",
+                task_id, e
+            );
+        }
+        Ok(()) => {}
     }
     CallbackManager::get_instance().remove_task(task_id);
     Ok(true)
@@ -272,18 +287,17 @@ pub fn delete(this: DownloadTask) -> Result<bool, BusinessError> {
 /// ```
 #[ani_rs::native]
 pub fn suspend(this: DownloadTask) -> Result<bool, BusinessError> {
-    RequestClient::get_instance()
-        .pause(this.task_id.parse().unwrap())
-        .map_err(|e| {
-            if e != ExceptionErrorCode::E_PERMISSION as i32 {
-                Ok(true)
-            } else {
-                Err(BusinessError::new(
-                    e,
-                    "Failed to delete download task".to_string(),
-                ))
-            }
-        });
+    match RequestClient::get_instance().pause(this.task_id.parse().unwrap()) {
+        Err(e) => {
+            // All failures keep the legacy true result for compatibility;
+            // only log them for diagnosis.
+            error!(
+                "suspend download task failed, task_id: {}, err: {}",
+                this.task_id, e
+            );
+        }
+        Ok(()) => {}
+    }
     Ok(true)
 }
 
@@ -318,18 +332,17 @@ pub fn suspend(this: DownloadTask) -> Result<bool, BusinessError> {
 /// ```
 #[ani_rs::native]
 pub fn restore(this: DownloadTask) -> Result<bool, BusinessError> {
-    RequestClient::get_instance()
-        .resume(this.task_id.parse().unwrap())
-        .map_err(|e| {
-            if e != ExceptionErrorCode::E_PERMISSION as i32 {
-                Ok(true)
-            } else {
-                Err(BusinessError::new(
-                    e,
-                    "Failed to delete download task".to_string(),
-                ))
-            }
-        });
+    match RequestClient::get_instance().resume(this.task_id.parse().unwrap()) {
+        Err(e) => {
+            // All failures keep the legacy true result for compatibility;
+            // only log them for diagnosis.
+            error!(
+                "restore download task failed, task_id: {}, err: {}",
+                this.task_id, e
+            );
+        }
+        Ok(()) => {}
+    }
     Ok(true)
 }
 
