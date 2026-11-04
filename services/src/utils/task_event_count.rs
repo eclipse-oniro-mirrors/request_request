@@ -123,6 +123,13 @@ pub(crate) fn task_fail_add() {
 /// Statistics are only reported if the load_state flag is true, indicating
 /// that task counts have been updated since the last report.
 ///
+/// The report is emitted as an `EXEC_ERROR` statistic event carrying
+/// `DfxCode::TASK_STATISTICS`. The `TASK_INFO_STATISTICS` event declared in
+/// `hisysevent.yaml` (`TASKS_SIZE` / `TASKS_NUMBER`) is intentionally NOT
+/// reported: per-task byte-size statistics were removed during the QoS
+/// refactoring (commit 81895930), and the DFX-side configuration difference
+/// is recorded here instead of restoring the event.
+///
 /// # Examples
 ///
 /// ```rust

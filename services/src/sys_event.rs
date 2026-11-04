@@ -20,10 +20,10 @@
 use hisysevent::{build_number_param, build_str_param, write, EventType, HiSysEventParam};
 
 const DOMAIN: &str = "REQUEST";
-const DONWLOAD_SA: &str = "DOWNLOAD_SERVER";
+const DOWNLOAD_SA: &str = "DOWNLOAD_SERVER";
 
 pub(crate) const ERROR_INFO: &str = "ERROR_INFO";
-pub(crate) const TASKS_TYPE: &str = "TASKS_TYPE";
+pub(crate) const TASK_TYPE: &str = "TASK_TYPE";
 pub(crate) const TOTAL_FILE_NUM: &str = "TOTAL_FILE_NUM";
 pub(crate) const FAIL_FILE_NUM: &str = "FAIL_FILE_NUM";
 pub(crate) const SUCCESS_FILE_NUM: &str = "SUCCESS_FILE_NUM";
@@ -232,10 +232,10 @@ pub(crate) fn sys_task_fault(
     reason_err: i32,
 ) {
     SysEvent::task_fault()
-        .param(build_str_param!(TASKS_TYPE, action))
-        .param(build_number_param!(TOTAL_FILE_NUM, total_file))
-        .param(build_number_param!(FAIL_FILE_NUM, fail_file))
-        .param(build_number_param!(SUCCESS_FILE_NUM, succ_file))
+        .param(build_str_param!(TASK_TYPE, action))
+        .param(build_number_param!(TOTAL_FILE_NUM, total_file as u32))
+        .param(build_number_param!(FAIL_FILE_NUM, fail_file as u32))
+        .param(build_number_param!(SUCCESS_FILE_NUM, succ_file as u32))
         .param(build_number_param!(ERROR_INFO, reason_err))
         .write();
 }
@@ -243,8 +243,8 @@ pub(crate) fn sys_task_fault(
 pub(crate) fn isys_fault(dfx_code: DfxCode, extra_info: &str) {
     SysEvent::exec_fault()
         .param(build_number_param!(PARAM_DFX_CODE, dfx_code as u32))
-        .param(build_str_param!(PARAM_BUNDLE_NAME, DONWLOAD_SA))
-        .param(build_str_param!(PARAM_MODULE_NAME, DONWLOAD_SA))
+        .param(build_str_param!(PARAM_BUNDLE_NAME, DOWNLOAD_SA))
+        .param(build_str_param!(PARAM_MODULE_NAME, DOWNLOAD_SA))
         .param(build_str_param!(PARAM_EXTRA_INFO, extra_info))
         .write();
 }
@@ -252,8 +252,8 @@ pub(crate) fn isys_fault(dfx_code: DfxCode, extra_info: &str) {
 pub(crate) fn isys_error(dfx_code: DfxCode, extra_info: &str) {
     SysEvent::exec_error()
         .param(build_number_param!(PARAM_DFX_CODE, dfx_code as u32))
-        .param(build_str_param!(PARAM_BUNDLE_NAME, DONWLOAD_SA))
-        .param(build_str_param!(PARAM_MODULE_NAME, DONWLOAD_SA))
+        .param(build_str_param!(PARAM_BUNDLE_NAME, DOWNLOAD_SA))
+        .param(build_str_param!(PARAM_MODULE_NAME, DOWNLOAD_SA))
         .param(build_str_param!(PARAM_EXTRA_INFO, extra_info))
         .write();
 }
