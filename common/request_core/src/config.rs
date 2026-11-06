@@ -514,14 +514,17 @@ pub enum Version {
 impl From<u32> for Version {
     /// Converts a raw integer to a `Version` enum variant.
     ///
-    /// # Panics
+    /// # Notes
     ///
-    /// Panics if the provided value does not correspond to a known version.
+    /// Any value that doesn't match a defined variant is mapped to
+    /// `Version::API9` (the oldest, most conservative semantics) instead of
+    /// panicking, so a corrupted or future value read from the database or
+    /// IPC cannot crash the process. This crate has no logging facility, so
+    /// the fallback is silent.
     fn from(value: u32) -> Self {
         match value {
-            1 => Version::API9,
             2 => Version::API10,
-            _ => unimplemented!(),
+            _ => Version::API9,
         }
     }
 }
@@ -539,14 +542,16 @@ pub enum Action {
 impl From<u32> for Action {
     /// Converts a raw integer to an `Action` enum variant.
     ///
-    /// # Panics
+    /// # Notes
     ///
-    /// Panics if the provided value does not correspond to a known action.
+    /// Any value that doesn't match a defined variant is mapped to
+    /// `Action::Download` instead of panicking, so a corrupted or future
+    /// value read from the database or IPC cannot crash the process. This
+    /// crate has no logging facility, so the fallback is silent.
     fn from(value: u32) -> Self {
         match value {
-            0 => Action::Download,
             1 => Action::Upload,
-            _ => unimplemented!(),
+            _ => Action::Download,
         }
     }
 }
@@ -561,11 +566,18 @@ pub enum Mode {
 }
 
 impl From<u32> for Mode {
+    /// Converts a raw integer to a `Mode` enum variant.
+    ///
+    /// # Notes
+    ///
+    /// Any value that doesn't match a defined variant is mapped to
+    /// `Mode::BackGround` instead of panicking, so a corrupted or future
+    /// value read from the database or IPC cannot crash the process. This
+    /// crate has no logging facility, so the fallback is silent.
     fn from(value: u32) -> Self {
         match value {
-            0 => Mode::BackGround,
             1 => Mode::FrontEnd,
-            _ => unimplemented!(),
+            _ => Mode::BackGround,
         }
     }
 }
@@ -584,16 +596,17 @@ pub enum NetworkConfig {
 impl From<i32> for NetworkConfig {
     /// Converts a raw integer to a `NetworkConfig` enum variant.
     ///
-    /// # Panics
+    /// # Notes
     ///
-    /// Panics if the provided value does not correspond to a known network
-    /// configuration.
+    /// Any value that doesn't match a defined variant is mapped to
+    /// `NetworkConfig::Any` instead of panicking, so a corrupted or future
+    /// value read from the database or IPC cannot crash the process. This
+    /// crate has no logging facility, so the fallback is silent.
     fn from(value: i32) -> Self {
         match value {
-            0 => NetworkConfig::Any,
             1 => NetworkConfig::Wifi,
             2 => NetworkConfig::Cellular,
-            _ => unimplemented!(),
+            _ => NetworkConfig::Any,
         }
     }
 }

@@ -15,6 +15,7 @@
 
 #include "legacy/request_manager.h"
 
+#include <atomic>
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
@@ -27,6 +28,8 @@
 #include "sys_event.h"
 
 namespace OHOS::Request::Legacy {
+static std::atomic<uint32_t> g_sendEventFailCount{0};
+static std::atomic<uint32_t> g_allocFailCount{0};
 std::map<std::string, RequestManager::DownloadDescriptor> RequestManager::downloadDescriptors_;
 std::mutex RequestManager::lock_;
 std::atomic<uint32_t> RequestManager::taskId_;
@@ -55,14 +58,12 @@ std::string RequestManager::GetTaskToken()
 // napi call happens on the caller's thread.
 void RequestManager::CallFunctionAsync(napi_env env, napi_ref func, const ArgsGenerator &generator)
 {
-    auto *data = new (std::nothrow) CallFunctionData;
+    auto *data = new (std::nothrow) CallFunctionData{env, func, generator};
     if (data == nullptr) {
-        REQUEST_HILOGE("Failed to create CallFunctionData");
+        REQUEST_HILOGE("Failed to create CallFunctionData, allocFailCount: %{public}u",
+            g_allocFailCount.fetch_add(1) + 1);
         return;
     }
-    data->env_ = env;
-    data->func_ = func;
-    data->generator_ = generator;
 
     int32_t ret = napi_send_event(
         env,
@@ -78,9 +79,18 @@ void RequestManager::CallFunctionAsync(napi_env env, napi_ref func, const ArgsGe
             napi_ref recv{};
             data->generator_(data->env_, &recv, argc, argv);
             napi_value callback{};
-            napi_get_reference_value(data->env_, data->func_, &callback);
+            napi_status funcStatus = napi_get_reference_value(data->env_, data->func_, &callback);
             napi_value thiz{};
-            napi_get_reference_value(data->env_, recv, &thiz);
+            napi_status recvStatus = napi_get_reference_value(data->env_, recv, &thiz);
+            if (funcStatus != napi_ok || callback == nullptr || recvStatus != napi_ok || thiz == nullptr) {
+                REQUEST_HILOGE("napi_get_reference_value failed, funcStatus: %{public}d, recvStatus: %{public}d",
+                    funcStatus, recvStatus);
+                napi_delete_reference(data->env_, data->func_);
+                napi_delete_reference(data->env_, recv);
+                napi_close_handle_scope(data->env_, scope);
+                delete data;
+                return;
+            }
             napi_value result{};
             napi_call_function(data->env_, thiz, callback, argc, argv, &result);
             napi_delete_reference(data->env_, data->func_);
@@ -91,7 +101,8 @@ void RequestManager::CallFunctionAsync(napi_env env, napi_ref func, const ArgsGe
         napi_eprio_high,
         "request:download");
     if (ret != napi_ok) {
-        REQUEST_HILOGE("napi_send_event failed: %{public}d", ret);
+        REQUEST_HILOGE("napi_send_event failed: %{public}d, sendEventFailCount: %{public}u", ret,
+            g_sendEventFailCount.fetch_add(1) + 1);
         delete data;
     }
 }
@@ -110,24 +121,29 @@ void RequestManager::OnTaskDone(const std::string &token, bool successful, const
     }
 
     if (successful && descriptor.successCb_) {
+        napi_env env_ = descriptor.env_;
+        napi_ref this_ = descriptor.this_;
+        std::string filename = descriptor.filename_;
         CallFunctionAsync(descriptor.env_, descriptor.successCb_,
-            [descriptor](napi_env env, napi_ref *recv, int &argc, napi_value *argv) {
-                *recv = descriptor.this_;
+            [env_, this_, filename](napi_env env, napi_ref *recv, int &argc, napi_value *argv) {
+                *recv = this_;
                 argc = SUCCESS_CB_ARGC;
-                argv[0] = NapiUtils::CreateObject(descriptor.env_);
-                NapiUtils::SetStringPropertyUtf8(descriptor.env_, argv[0], "uri", URI_PREFIX + descriptor.filename_);
+                argv[0] = NapiUtils::CreateObject(env_);
+                NapiUtils::SetStringPropertyUtf8(env_, argv[0], "uri", URI_PREFIX + filename);
             });
     }
     if (!successful && descriptor.failCb_) {
+        napi_env env_ = descriptor.env_;
+        napi_ref this_ = descriptor.this_;
+        std::string msg = errMsg;
         CallFunctionAsync(descriptor.env_, descriptor.failCb_,
-            [descriptor, errMsg](napi_env env, napi_ref *recv, int &argc, napi_value *argv) {
-                *recv = descriptor.this_;
+            [env_, this_, msg](napi_env env, napi_ref *recv, int &argc, napi_value *argv) {
+                *recv = this_;
                 argc = FAIL_CB_ARGC;
-                argv[0] = NapiUtils::Convert2JSValue(descriptor.env_, errMsg);
-                argv[1] = NapiUtils::Convert2JSValue(descriptor.env_, FAIL_CB_DOWNLOAD_ERROR);
+                argv[0] = NapiUtils::Convert2JSValue(env_, msg);
+                argv[1] = NapiUtils::Convert2JSValue(env_, FAIL_CB_DOWNLOAD_ERROR);
             });
     }
-    delete descriptor.task_;
 }
 
 std::string RequestManager::GetFilenameFromUrl(std::string &url)
@@ -270,10 +286,7 @@ napi_value RequestManager::Download(napi_env env, napi_callback_info info)
     }
 
     auto token = GetTaskToken();
-    auto *task = new (std::nothrow) DownloadTask(token, option, OnTaskDone);
-    if (task == nullptr) {
-        return res;
-    }
+    auto task = std::make_shared<DownloadTask>(token, option, OnTaskDone);
     DownloadDescriptor descriptor{ task, option.filename_, env };
     {
         std::lock_guard<std::mutex> lockGuard(lock_);

@@ -17,6 +17,9 @@
 #define C_REQUEST_DATABASE_H
 
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <vector>
 
 #include "c_progress.h"
@@ -166,6 +169,10 @@ public:
 
 private:
     RequestDataBase(std::string path, bool encryptStatus);
+    // Returns a local copy of the shared store handle under `storeMutex_`,
+    // so readers keep working on a stable handle even while another thread
+    // rebuilds the store (CheckAndRebuildDataBase swaps `store_`).
+    std::shared_ptr<OHOS::NativeRdb::RdbStore> AcquireStore();
 
 private:
     // Path and encrypt flag remembered from construction, so corruption
@@ -173,6 +180,9 @@ private:
     // than a hardcoded one.
     std::string path_;
     bool encryptStatus_;
+    // Protects `store_` against the swap performed by CheckAndRebuildDataBase;
+    // readers copy the shared_ptr under the lock instead of using it directly.
+    mutable std::shared_mutex storeMutex_;
     std::shared_ptr<OHOS::NativeRdb::RdbStore> store_;
 };
 

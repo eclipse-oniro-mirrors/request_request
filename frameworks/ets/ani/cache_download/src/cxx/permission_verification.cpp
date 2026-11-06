@@ -15,6 +15,8 @@
 
 #include "permission_verification.h"
 
+#include <hilog/log.h>
+
 #include "access_token.h"
 #include "accesstoken_kit.h"
 #include "ipc_skeleton.h"
@@ -22,15 +24,25 @@
 namespace OHOS::Request {
 using namespace OHOS::Security::AccessToken;
 
+namespace {
+constexpr HiviewDFX::HiLogLabel LABEL = { LOG_CORE, 0xD001C50, "RequestCacheDownload" };
+}
+
 bool CheckInternetPermission()
 {
     uint64_t tokenId = IPCSkeleton::GetCallingFullTokenID();
     TypeATokenTypeEnum tokenType = AccessTokenKit::GetTokenTypeFlag(static_cast<AccessTokenID>(tokenId));
     if (tokenType == TOKEN_INVALID) {
+        HiviewDFX::HiLog::Warn(LABEL, "CheckInternetPermission denied: invalid token");
         return false;
     }
     int result = AccessTokenKit::VerifyAccessToken(tokenId, "ohos.permission.INTERNET");
-    return result == PERMISSION_GRANTED;
+    if (result != PERMISSION_GRANTED) {
+        HiviewDFX::HiLog::Warn(LABEL, "CheckInternetPermission denied: token type %{public}d",
+            static_cast<int>(tokenType));
+        return false;
+    }
+    return true;
 }
 
 bool CheckGetNetworkInfoPermission()
@@ -38,10 +50,16 @@ bool CheckGetNetworkInfoPermission()
     uint64_t tokenId = IPCSkeleton::GetCallingFullTokenID();
     TypeATokenTypeEnum tokenType = AccessTokenKit::GetTokenTypeFlag(static_cast<AccessTokenID>(tokenId));
     if (tokenType == TOKEN_INVALID) {
+        HiviewDFX::HiLog::Warn(LABEL, "CheckGetNetworkInfoPermission denied: invalid token");
         return false;
     }
     int result = AccessTokenKit::VerifyAccessToken(tokenId, "ohos.permission.GET_NETWORK_INFO");
-    return result == PERMISSION_GRANTED;
+    if (result != PERMISSION_GRANTED) {
+        HiviewDFX::HiLog::Warn(LABEL, "CheckGetNetworkInfoPermission denied: token type %{public}d",
+            static_cast<int>(tokenType));
+        return false;
+    }
+    return true;
 }
 
 } // namespace OHOS::Request

@@ -38,6 +38,9 @@ UploadTask::UploadTask(std::shared_ptr<UploadConfig> &uploadConfig)
 UploadTask::~UploadTask()
 {
     UPLOAD_HILOGD(UPLOAD_MODULE_FRAMEWORK, "~UploadTask. In.");
+    // Lock order: mutex_ is always acquired before removeMutex_ (Remove
+    // takes removeMutex_ while mutex_ is held here). New code must not
+    // acquire them in the reverse order.
     std::lock_guard<std::mutex> guard(mutex_);
     if (!isRemoved_) {
         Remove();

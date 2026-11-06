@@ -90,7 +90,9 @@ impl RequestServiceStub {
     ///
     /// # Returns
     ///
-    /// `true` if the task belongs to the specified user ID, `false` otherwise.
+    /// `true` if the task exists and belongs to the specified user ID,
+    /// `false` otherwise. Engine-level query failures are treated the same
+    /// as a missing task for compatibility.
     pub(crate) fn check_task_uid(&self, task_id: u32, uid: u64) -> bool {
         let db = RequestDb::get_instance();
         db.query_task_uid(task_id) == Some(uid)
@@ -106,7 +108,8 @@ impl RequestServiceStub {
     ///
     /// # Returns
     ///
-    /// `true` if the caller has manager permission or owns the task, `false` otherwise.
+    /// `true` if the caller has manager permission or owns the task, `false`
+    /// otherwise.
     ///
     /// # Notes
     ///

@@ -50,14 +50,18 @@ impl SystemConfigManager {
 
     /// Retrieves the current system configuration.
     ///
+    /// Takes a single proxy snapshot on the C++ side so host, port, and
+    /// exclusion list always come from the same proxy update.
+    ///
     /// # Returns
     ///
     /// A `SystemConfig` struct containing the current proxy settings.
     pub(crate) fn system_config(&self) -> SystemConfig {
+        let snapshot = self.proxy.snapshot();
         SystemConfig {
-            proxy_host: self.proxy.host(),
-            proxy_port: self.proxy.port(),
-            proxy_exlist: self.proxy.exlist(),
+            proxy_host: snapshot.host.to_string(),
+            proxy_port: snapshot.port.to_string(),
+            proxy_exlist: snapshot.exclusion_list.to_string(),
         }
     }
 }

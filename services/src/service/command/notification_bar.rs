@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Notification management functionality for the request service.
-//! 
+//!
 //! This module implements methods for creating and managing notification groups
 //! for download/upload tasks, as well as controlling task notifications visibility.
 //! It integrates with the notification system to provide user feedback during
@@ -83,7 +83,10 @@ impl RequestServiceStub {
         // Read and validate disable flag with permission check
         let mut disable: bool = data.read()?;
         // Only system APIs with special permission can disable notifications
-        if disable && (!is_system_api() || !check_permission("ohos.permission.REQUEST_DISABLE_NOTIFICATION")) {
+        if disable
+            && (!is_system_api()
+                || !check_permission("ohos.permission.REQUEST_DISABLE_NOTIFICATION"))
+        {
             disable = false;
         }
 
@@ -96,7 +99,10 @@ impl RequestServiceStub {
             Ok(false) => false,
             Err(_) => false,
         };
-        info!("Service create_group hide_stop_button = {}", hide_stop_button);
+        info!(
+            "Service create_group hide_stop_button = {}",
+            hide_stop_button
+        );
 
         // Record the caller UID as the group owner; attach_group / delete_group
         // verify ownership against it later.
@@ -114,7 +120,15 @@ impl RequestServiceStub {
         }
 
         let new_group_id = NotificationDispatcher::get_instance().create_group(
-            gauge, title, text, want_agent, disable, visibility, hide_stop_button, uid);
+            gauge,
+            title,
+            text,
+            want_agent,
+            disable,
+            visibility,
+            hide_stop_button,
+            uid,
+        );
         reply.write(&new_group_id.to_string())?;
         Ok(())
     }
@@ -156,7 +170,7 @@ impl RequestServiceStub {
             reply.write(&(ErrorCode::GroupNotFound as i32))?;
             return Ok(());
         };
-        
+
         // Read list of task IDs to attach to the group
         let task_ids = data.read::<Vec<String>>()?;
 
@@ -185,7 +199,10 @@ impl RequestServiceStub {
                 sys_event!(
                     ExecError,
                     DfxCode::INVALID_IPC_MESSAGE_A38,
-                    &format!("End Service attach_group, task_id: {}, failed: task_id not belong to uid", task_id)
+                    &format!(
+                        "End Service attach_group, task_id: {}, failed: task_id not belong to uid",
+                        task_id
+                    )
                 );
                 reply.write(&(ErrorCode::TaskNotFound as i32))?;
                 return Ok(());
@@ -221,7 +238,10 @@ impl RequestServiceStub {
             sys_event!(
                 ExecError,
                 DfxCode::INVALID_IPC_MESSAGE_A38,
-                &format!("End Service attach_group, task_id: {:?}, group_id: {}, failed: {:?}",task_ids, group_id, ret)
+                &format!(
+                    "End Service attach_group, task_id: {:?}, group_id: {}, failed: {:?}",
+                    task_ids, group_id, ret
+                )
             );
         }
         reply.write(&(ret as i32))?;
@@ -338,7 +358,7 @@ impl RequestServiceStub {
         let Ok(task_id) = task_id.parse::<u32>() else {
             return Err(ErrorCode::TaskNotFound);
         };
-        
+
         // Get the task owner's UID from database
         let Some(task_uid) = RequestDb::get_instance().query_task_uid(task_id) else {
             return Err(ErrorCode::TaskNotFound);

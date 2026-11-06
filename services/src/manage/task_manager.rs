@@ -569,7 +569,10 @@ impl TaskManager {
         let any_tasks = task_ids.is_empty();
         let update_on_demand_policy = update_policy(any_tasks);
         if update_on_demand_policy != 0 {
-            info!("Update on demand policy failed");
+            error!(
+                "Update on demand policy failed on unload, ret: {}, any_tasks: {}",
+                update_on_demand_policy, any_tasks
+            );
         }
 
         // OH-only: the unload result is discarded and the function still

@@ -87,7 +87,7 @@ export default namespace request {
     p1.then((content: Any) => {
         callback(null, content as DownloadTask);
     }, (err: Error): void => {
-        callback(err as BusinessError, new DownloadTaskInner);
+        callback(err as BusinessError, undefined);
     });
   }
 
@@ -115,7 +115,7 @@ export default namespace request {
     p1.then((content: Any) => {
         callback(null, content as UploadTask);
     }, (err: Error): void => {
-        callback(err as BusinessError, new UploadTaskInner);
+        callback(err as BusinessError, undefined);
     });
   }
 
@@ -407,7 +407,7 @@ export default namespace request {
         p1.then((content: Any) => {
             callback(null, content as DownloadInfo);
         }, (err: Error): void => {
-            callback(err as BusinessError, new DownloadInfoInner);
+            callback(err as BusinessError, undefined);
         });
     }
 
@@ -1259,7 +1259,7 @@ export default namespace request {
         taskMap.set(task.tid, task);
         callback(null, task);
       }, (err: Error): void => {
-        callback(err as BusinessError,new TaskInner);
+        callback(err as BusinessError, undefined);
       });
     }
 
@@ -1352,7 +1352,7 @@ export default namespace request {
       p1.then((content: Any) => {
         callback(null, content as TaskInfo);
       }, (err: Error): void => {
-        callback(err as BusinessError, new TaskInfoInner);
+        callback(err as BusinessError, undefined);
       });
     }
 
@@ -1380,7 +1380,7 @@ export default namespace request {
       p1.then((content: Any) => {
         callback(null, content as TaskInfo);
       }, (err: Error): void => {
-        callback(err as BusinessError, new TaskInfoInner);
+        callback(err as BusinessError, undefined);
       });
     }
 
@@ -1444,7 +1444,7 @@ export default namespace request {
       p1.then((content: Any) => {
         callback(null, content as TaskInfo);
       }, (err: Error): void => {
-        callback(err as BusinessError, new TaskInfoInner);
+        callback(err as BusinessError, undefined);
       });
     }
 

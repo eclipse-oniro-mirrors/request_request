@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task touch/refresh functionality for request service.
-//! 
+//!
 //! This module provides methods to touch/update multiple download tasks,
 //! with validation, permission checking, and bulk operation support.
 
@@ -47,7 +47,7 @@ impl RequestServiceStub {
     pub(crate) fn touch(&self, data: &mut MsgParcel, reply: &mut MsgParcel) -> IpcResult<()> {
         // Check if caller has download permission (needed for privileged operations)
         let permission = PermissionChecker::check_down_permission();
-        
+
         // Read input count and convert to usize
         let len: u32 = data.read()?;
         let len = len as usize;
@@ -61,10 +61,10 @@ impl RequestServiceStub {
 
         // Get caller's UID for permission validation
         let ipc_uid = ipc::Skeleton::calling_uid();
-        
+
         // Pre-allocate result vector to avoid reallocations
         let mut vec = vec![(ErrorCode::Other, TaskInfo::new()); len];
-        
+
         // Process each task individually
         for i in 0..len {
             // Read task ID and token from input parcel
@@ -89,10 +89,11 @@ impl RequestServiceStub {
             let task_uid = match RequestDb::get_instance().query_task_uid(task_id) {
                 Some(uid) => uid,
                 None => {
+                    // Task doesn't exist or engine error
                     set_code_with_index_other(&mut vec, i, ErrorCode::TaskNotFound);
                     continue;
                 }
-            };
+                };
 
             // Verify current account matches task owner's account
             if !check_current_account(task_uid) {
@@ -124,7 +125,7 @@ impl RequestServiceStub {
                 .lock()
                 .unwrap()
                 .touch(task_uid, task_id, token);
-                
+
             // Process touch result for this task
             match info {
                 Some(task_info) => {
@@ -144,10 +145,10 @@ impl RequestServiceStub {
                 }
             };
         }
-        
+
         // Write overall operation success
         reply.write(&(ErrorCode::ErrOk as i32))?;
-        
+
         // Write individual results for each task
         for (c, info) in vec {
             reply.write(&(c as i32))?;

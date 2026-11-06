@@ -27,6 +27,11 @@ namespace OHOS::Request {
 EventSubscriber::EventSubscriber(EventFwk::CommonEventSubscribeInfo &subscribeInfo, rust::Box<EventHandler> handler)
     : CommonEventSubscriber(subscribeInfo)
 {
+    // Ownership note: the boxed handler is unboxed into a raw pointer here
+    // and reclaimed by the destructor via from_raw. The subscription object
+    // must be held for the whole process (subscribe once at SA startup,
+    // never destroy while events can still be delivered), otherwise from_raw
+    // races with an in-flight OnReceiveEvent.
     _handler = handler.into_raw();
 }
 

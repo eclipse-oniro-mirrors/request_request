@@ -43,6 +43,11 @@ AppInfo GetNameAndIndex(int32_t uid)
         return appInfo;
     }
     sptr<IBundleMgr> bundleMgr = iface_cast<IBundleMgr>(remoteObject);
+    if (bundleMgr == nullptr) {
+        REQUEST_HILOGE("GetNameAndIndex, fail to cast bundle manager proxy.");
+        SysEventLog::SendSysEventLog(FAULT_EVENT, SAMGR_FAULT_00, "Cast BundleMgr proxy failed");
+        return appInfo;
+    }
     ErrCode ret = bundleMgr->GetNameAndIndexForUid(uid, bundleName, appIndex);
     if (ret != ERR_OK) {
         REQUEST_HILOGE("GetNameAndIndex, err ret: %{public}d", ret);

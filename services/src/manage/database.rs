@@ -35,6 +35,7 @@ cfg_not_oh! {
     const CREATE_TABLE: &'static str = "CREATE TABLE IF NOT EXISTS request_task (task_id INTEGER PRIMARY KEY, uid INTEGER, token_id INTEGER, action INTEGER, mode INTEGER, cover INTEGER, network INTEGER, metered INTEGER, roaming INTEGER, ctime INTEGER, mtime INTEGER, reason INTEGER, gauge INTEGER, retry INTEGER, redirect INTEGER, tries INTEGER, version INTEGER, config_idx INTEGER, begins INTEGER, ends INTEGER, precise INTEGER, priority INTEGER, background INTEGER, bundle TEXT, url TEXT, data TEXT, token TEXT, title TEXT, description TEXT, method TEXT, headers TEXT, config_extras TEXT, mime_type TEXT, state INTEGER, idx INTEGER, total_processed INTEGER, sizes TEXT, processed TEXT, extras TEXT, form_items BLOB, file_specs BLOB, each_file_status BLOB, body_file_names BLOB, certs_paths BLOB)";
 }
 use crate::config::Action;
+use crate::database::db_path;
 use crate::error::ErrorCode;
 use crate::service::client::ClientManagerEntry;
 use crate::task::config::TaskConfig;
@@ -43,7 +44,6 @@ use crate::task::info::{State, TaskInfo, UpdateInfo};
 use crate::task::reason::Reason;
 use crate::task::request_task::RequestTask;
 use crate::utils::{call_once, get_current_timestamp, hashmap_to_string};
-use crate::database::db_path;
 
 /// Persistent store backing request tasks.
 ///
@@ -182,15 +182,12 @@ impl RequestDb {
     ///
     /// Each `i64` value returned by the C++ engine is converted to `T` via
     /// `TryFrom`; conversion failures fall back to `T::default()` and emit a
-    /// DFX fault rather than propagating the error. Engine-level failures are
-    /// logged but still return whatever partial rows were collected.
+    /// DFX fault rather than propagating the error. Engine-level failures
+    /// (`ret != 0`) are logged and reported as a DFX fault, then handled as
+    /// an empty result for compatibility with the legacy behavior.
     ///
     /// # Arguments
     /// * `sql` - The SQL query to run; the first column of each row is read.
-    ///
-    /// # Returns
-    /// The collected (and converted) values. The vector may be empty when the
-    /// query matches no rows or when the engine reports an error.
     #[cfg(feature = "oh")]
     pub(crate) fn query_integer<T: TryFrom<i64> + Default>(&self, sql: &str) -> Vec<T>
     where
@@ -247,9 +244,9 @@ impl RequestDb {
     /// * `task_id` - The task id to look up.
     ///
     /// # Returns
-    /// `true` when exactly one matching row exists. Returns `false` (and emits
-    /// a DFX fault) when the underlying query returns no rows, indicating a
-    /// database error.
+    /// `true` when exactly one matching row exists, `false` otherwise (an
+    /// engine failure is logged and emits a DFX fault, then counts as
+    /// `false`).
     pub(crate) fn contains_task(&self, task_id: u32) -> bool {
         let sql = format!(
             "SELECT COUNT(*) FROM request_task WHERE task_id = {}",
@@ -278,8 +275,9 @@ impl RequestDb {
     /// The task's token id on success.
     ///
     /// # Errors
-    /// Returns `Err(-1)` when the query yields no rows (task missing or
-    /// database error), after emitting a DFX fault.
+    /// Returns `Err(-1)` when the query yields no rows, after emitting a DFX
+    /// fault. Engine failures are logged inside
+    /// [`query_integer`](Self::query_integer) and surface as an empty result.
     pub(crate) fn query_task_token_id(&self, task_id: u32) -> Result<u64, i32> {
         let sql = format!(
             "SELECT token_id FROM request_task WHERE task_id = {}",
@@ -480,7 +478,10 @@ impl RequestDb {
     /// * `task_id` - The task id to look up.
     ///
     /// # Returns
-    /// `Some(uid)` when the task exists, `None` otherwise.
+    /// `Some(uid)` when the task exists, `None` otherwise. Engine-level
+    /// query failures are logged and reported as a DFX fault inside
+    /// [`query_integer`](Self::query_integer); they surface here as `None`,
+    /// which callers treat the same as a missing task for compatibility.
     pub(crate) fn query_task_uid(&self, task_id: u32) -> Option<u64> {
         let sql = format!("SELECT uid FROM request_task WHERE task_id = {}", task_id);
         self.query_integer(&sql).first().copied()

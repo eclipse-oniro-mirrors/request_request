@@ -76,7 +76,7 @@ bool AppProcessState::RegisterAppStateChanged(RegCallBack &&callback)
         REQUEST_HILOGE("register fail, ret = %{public}d", ret);
         return false;
     }
-    REQUEST_HILOGI("RegisterAppState Out");
+    REQUEST_HILOGE("iface_cast AppMgr failed, app state observer not registered");
     return false;
 }
 
@@ -140,10 +140,11 @@ void AppProcessState::OnForegroundApplicationChanged(const AppExecFwk::AppStateD
 } // namespace OHOS::Request
 
 using namespace OHOS::Request;
-void RegisterAPPStateCallback(APPStateCallback fun)
+bool RegisterAPPStateCallback(APPStateCallback fun)
 {
-    AppProcessState::GetInstance()->RegisterAppStateChanged(fun);
-    REQUEST_HILOGD("running RegisterAPPStateCallback");
+    bool ret = AppProcessState::GetInstance()->RegisterAppStateChanged(fun);
+    REQUEST_HILOGD("running RegisterAPPStateCallback, ret = %{public}d", ret);
+    return ret;
 }
 
 void RegisterProcessDiedCallback(ProcessStateCallback fun)

@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task removal functionality for download tasks.
-//! 
+//!
 //! This module provides methods to remove tasks in bulk,
 //! including permission verification, input validation,
 //! and ownership checks before sending removal events.
@@ -85,15 +85,15 @@ impl RequestServiceStub {
 
         // Get calling UID for ownership verification
         let ipc_uid = ipc::Skeleton::calling_uid();
-        
+
         // Initialize results vector with default error codes
         let mut vec = vec![ErrorCode::Other; len];
-        
+
         // Process each task ID individually
         for i in 0..len {
             let task_id: String = data.read()?;
             info!("Service remove tid {}", task_id);
-            
+
             // Validate and convert task ID format
             let Ok(task_id) = task_id.parse::<u32>() else {
                 error!("Service remove, failed: tid not valid: {}", task_id);
@@ -110,10 +110,11 @@ impl RequestServiceStub {
             let task_uid = match RequestDb::get_instance().query_task_uid(task_id) {
                 Some(uid) => uid,
                 None => {
+                    // Task doesn't exist or engine error
                     set_code_with_index(&mut vec, i, ErrorCode::TaskNotFound);
                     continue;
                 }
-            };
+                };
 
             // Verify task belongs to the current account
             if !check_current_account(task_uid) {
@@ -151,7 +152,7 @@ impl RequestServiceStub {
                 set_code_with_index(&mut vec, i, ErrorCode::Other);
                 continue;
             }
-            
+
             // Get result from task manager
             let ret = match rx.get() {
                 Some(ret) => ret,
@@ -172,7 +173,7 @@ impl RequestServiceStub {
                     continue;
                 }
             };
-            
+
             // Store the result and log any failures
             set_code_with_index(&mut vec, i, ret);
             if ret != ErrorCode::ErrOk {
@@ -184,10 +185,10 @@ impl RequestServiceStub {
                 );
             }
         }
-        
+
         // Send successful operation status
         reply.write(&(ErrorCode::ErrOk as i32))?;
-        
+
         // Return individual results for each task
         for ret in vec {
             reply.write(&(ret as i32))?;

@@ -20,6 +20,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use ani_rs::business_error::BusinessError;
 use ani_rs::objects::{AniFnObject, GlobalRefCallback};
 use ani_rs::AniEnv;
 use request_client::RequestClient;
@@ -182,7 +183,12 @@ pub fn on_event(
             }
         }
         // Handle unknown event types
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
 
     // Register callback with request client and add to manager
@@ -256,7 +262,12 @@ pub fn on_response_event(
             }
         }
         // Handle unknown event types
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     RequestClient::get_instance().register_callback(task_id, coll.clone());
     callback_mgr.tasks.lock().unwrap().insert(task_id, coll);
@@ -296,7 +307,12 @@ pub fn on_fault_event(
                 })
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
 
     // Register callback with request client and add to manager
@@ -343,7 +359,12 @@ pub fn on_wait_event(
                 })
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     RequestClient::get_instance().register_callback(task_id, coll.clone());
     callback_mgr.tasks.lock().unwrap().insert(task_id, coll);
@@ -397,7 +418,12 @@ pub fn off_event(
                 coll.on_resume.lock().unwrap().retain(|x| *x != callback);
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     Ok(())
 }
@@ -422,7 +448,12 @@ pub fn off_response_event(
                 coll.on_response.lock().unwrap().retain(|x| *x != callback);
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     Ok(())
 }
@@ -447,7 +478,12 @@ pub fn off_fault_event(
                 coll.on_fault.lock().unwrap().retain(|x| *x != callback);
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     Ok(())
 }
@@ -472,7 +508,12 @@ pub fn off_wait_event(
                 coll.on_wait.lock().unwrap().retain(|x| *x != callback);
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     Ok(())
 }
@@ -537,7 +578,12 @@ pub fn off_events(
                 coll.on_wait.lock().unwrap().clear();
             }
         }
-        _ => unimplemented!(),
+        _ => {
+            return Err(BusinessError::new(
+                401,
+                "Parameter verification failed, event parse error".to_string(),
+            ))
+        }
     };
     Ok(())
 }
@@ -648,9 +694,12 @@ impl request_client::Callback for CallbackColl {
     /// # Parameters
     ///
     /// * `progress` - The progress information at the time of failure
-    /// * `_error_code` - The error code associated with the failure (currently
-    ///   unused)
-    fn on_failed(&self, progress: &Progress, _error_code: i32) {
+    /// * `error_code` - The error code associated with the failure
+    fn on_failed(&self, progress: &Progress, error_code: i32) {
+        // The error code is logged for diagnosis only; the callback keeps
+        // the legacy Progress shape (extras carry HTTP response headers,
+        // not internal error codes).
+        info!("on_failed called with error_code: {}", error_code);
         let callbacks = self.on_fail.lock().unwrap();
         for callback in callbacks.iter() {
             callback.execute((progress.into(),));

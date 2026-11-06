@@ -300,10 +300,9 @@ int32_t JsTask::AuthorizePath(const Config &config)
 void JsTask::AddRemoveListener(const std::shared_ptr<ContextInfo> &context)
 {
     std::string tid = context->tid;
-    context->task->listenerMutex_.lock();
+    std::lock_guard<std::mutex> lock(context->task->listenerMutex_);
     auto listener = std::make_shared<JSNotifyDataListener>(context->env_, tid, SubscribeType::REMOVE);
     context->task->notifyDataListenerMap_[SubscribeType::REMOVE] = listener;
-    context->task->listenerMutex_.unlock();
     RequestManager::GetInstance()->AddListener(tid, SubscribeType::REMOVE, listener);
 }
 

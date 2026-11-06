@@ -24,9 +24,39 @@ namespace OHOS::Request {
 constexpr uint8_t MAX_ARGC = 10;
 
 // Peels an optional trailing function off argv (callback style, shrinking
-// argc by one), then runs the input stage on the JS thread. An input
-// failure is recorded in innerCode_ and disables exec/output, so Call()
-// only reports the error.
+// argc by one) and pins it as the context's callbackRef_. Returns false
+// when create_reference failed on API10 — the parameter error is already
+// recorded in the context then (exec/output disabled), so the constructor
+// must return and Call() only reports the error.
+static bool PinCallbackRef(napi_env env, size_t &argc, napi_value *argv,
+    const std::shared_ptr<AsyncCall::Context> &context)
+{
+    if (argc == 0) {
+        return true;
+    }
+    napi_valuetype valueType = napi_undefined;
+    napi_typeof(env, argv[argc - 1], &valueType);
+    if (valueType != napi_function) {
+        return true;
+    }
+    napi_status status = napi_create_reference(env, argv[argc - 1], 1, &context->callbackRef_);
+    if (status != napi_ok) {
+        REQUEST_HILOGE("napi_create_reference callback failed: %{public}d", status);
+        if (context->version_ == Version::API10) {
+            context->innerCode_ = E_PARAMETER_CHECK;
+            context->exec_ = nullptr;
+            context->output_ = nullptr;
+            NapiUtils::ThrowError(env, E_PARAMETER_CHECK, "Parameter verification failed", true);
+            return false;
+        }
+    }
+    argc = argc - 1;
+    return true;
+}
+
+// Runs the input stage on the JS thread after peeling the optional
+// trailing callback (see PinCallbackRef). An input failure is recorded in
+// innerCode_ and disables exec/output, so Call() only reports the error.
 AsyncCall::AsyncCall(napi_env env, napi_callback_info info, const std::shared_ptr<Context> &context)
 {
     if (context == nullptr) {
@@ -37,13 +67,8 @@ AsyncCall::AsyncCall(napi_env env, napi_callback_info info, const std::shared_pt
     napi_value argv[MAX_ARGC] = { nullptr };
     napi_value self = nullptr;
     napi_get_cb_info(env, info, &argc, argv, &self, nullptr);
-    napi_valuetype valueType = napi_undefined;
-    if (argc > 0) {
-        napi_typeof(env, argv[argc - 1], &valueType);
-        if (valueType == napi_function) {
-            napi_create_reference(env, argv[argc - 1], 1, &context->callbackRef_);
-            argc = argc - 1;
-        }
+    if (!PinCallbackRef(env, argc, argv, context)) {
+        return;
     }
 
     if (context->input_ == nullptr) {
@@ -59,7 +84,17 @@ AsyncCall::AsyncCall(napi_env env, napi_callback_info info, const std::shared_pt
         REQUEST_HILOGE("input_ status fail");
         return;
     }
-    napi_create_reference(env, self, 1, &context->self_);
+    napi_status selfStatus = napi_create_reference(env, self, 1, &context->self_);
+    if (selfStatus != napi_ok) {
+        REQUEST_HILOGE("napi_create_reference self failed: %{public}d", selfStatus);
+        if (context->version_ == Version::API10) {
+            context->innerCode_ = E_PARAMETER_CHECK;
+            context->exec_ = nullptr;
+            context->output_ = nullptr;
+            NapiUtils::ThrowError(env, E_PARAMETER_CHECK, "Parameter verification failed", true);
+            return;
+        }
+    }
 }
 
 AsyncCall::~AsyncCall()
@@ -115,7 +150,9 @@ napi_value AsyncCall::Call(const std::shared_ptr<Context> &context, const std::s
 }
 
 // Worker-thread stage of the async work; the one-shot exec_ clearing also
-// guards against a second run.
+// guards against a second run. The module is built with -fno-exceptions, so
+// exec_ (a std::function) cannot throw here; a null/empty exec_ is skipped
+// so the work still completes and the promise does not stay pending.
 void AsyncCall::OnExecute(napi_env env, void *data)
 {
     WorkData *workData = reinterpret_cast<WorkData *>(data);

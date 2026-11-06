@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task speed limitation functionality for download tasks.
-//! 
+//!
 //! This module provides methods to set maximum download speed limits for tasks,
 //! with validation, permission checking, and bulk operation support.
 
@@ -61,7 +61,7 @@ impl RequestServiceStub {
         info!("Service set_max_speed");
         // Minimum speed limit: 16KB/s
         const MIN_SPEED_LIMIT: i64 = 16 * 1024;
-        
+
         // Check if caller has download permission
         let permission = PermissionChecker::check_down_permission();
 
@@ -78,15 +78,15 @@ impl RequestServiceStub {
 
         // Get calling process UID for permission verification
         let uid = ipc::Skeleton::calling_uid();
-        
+
         // Initialize result vector with default error values
         let mut vec = vec![ErrorCode::Other; len];
-        
+
         // Process each task individually
         for i in 0..len {
             let task_id: String = data.read()?;
             let max_speed: i64 = data.read()?;
-            
+
             // Validate speed limit is above minimum threshold
             if max_speed < MIN_SPEED_LIMIT {
                 error!(
@@ -104,7 +104,7 @@ impl RequestServiceStub {
                 set_code_with_index(&mut vec, i, ErrorCode::ParameterCheck);
                 continue;
             }
-            
+
             // Parse and validate task ID format
             let Ok(task_id) = task_id.parse::<u32>() else {
                 error!("Service set_max_speed, failed: tid not valid: {}", task_id);
@@ -205,7 +205,7 @@ impl RequestServiceStub {
 
         // Send overall operation success code
         reply.write(&(ErrorCode::ErrOk as i32))?;
-        
+
         // Send individual task results
         for ret in vec {
             reply.write(&(ret as i32))?;

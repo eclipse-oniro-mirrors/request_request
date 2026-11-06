@@ -61,7 +61,7 @@ extern "C" {
 
 typedef void (*APPStateCallback)(int32_t, int32_t, int32_t);
 typedef void (*ProcessStateCallback)(int32_t, int32_t, int32_t, CStringWrapper);
-void RegisterAPPStateCallback(APPStateCallback fun);
+bool RegisterAPPStateCallback(APPStateCallback fun);
 void RegisterProcessDiedCallback(ProcessStateCallback fun);
 
 #ifdef __cplusplus

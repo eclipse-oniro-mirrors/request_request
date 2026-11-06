@@ -18,6 +18,7 @@
 
 #include <cstdio>
 #include <functional>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -30,7 +31,7 @@ namespace OHOS::Request::Legacy {
 // handle. Resumes from the already-downloaded prefix when the local file
 // is shorter than the remote size, retries up to 10 times, then reports
 // through the DoneFunc callback.
-class DownloadTask {
+class DownloadTask : public std::enable_shared_from_this<DownloadTask> {
 public:
     /// One download request: url, target file name and directory, extra
     /// header lines.

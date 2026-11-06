@@ -12,7 +12,7 @@
 // limitations under the License.
 
 //! Task mode configuration functionality for download tasks.
-//! 
+//!
 //! This module provides methods to change the operational mode of tasks,
 //! with permission checking, validation, and event-based task management.
 
@@ -138,7 +138,7 @@ impl RequestServiceStub {
             reply.write(&(ErrorCode::Other as i32))?;
             return Err(IpcStatusCode::Failed);
         }
-        
+
         // Receive result from task manager
         let ret = match rx.get() {
             Some(ret) => ret,
@@ -156,7 +156,7 @@ impl RequestServiceStub {
                 return Err(IpcStatusCode::Failed);
             }
         };
-        
+
         // Send the operation result
         reply.write(&(ret as i32))?;
         Ok(())
