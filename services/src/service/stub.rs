@@ -90,12 +90,12 @@ impl RequestServiceStub {
     ///
     /// # Returns
     ///
-    /// `true` if the task exists and belongs to the specified user ID,
+    /// `true` if the task exists and belongs to the specified app UID,
     /// `false` otherwise. Engine-level query failures are treated the same
     /// as a missing task for compatibility.
-    pub(crate) fn check_task_uid(&self, task_id: u32, uid: u64) -> bool {
+    pub(crate) fn check_task_app_uid(&self, task_id: u32, app_uid: u64) -> bool {
         let db = RequestDb::get_instance();
-        db.query_task_uid(task_id) == Some(uid)
+        db.query_task_uid(task_id) == Some(app_uid)
     }
 
     #[allow(dead_code)]
@@ -104,7 +104,7 @@ impl RequestServiceStub {
     /// # Arguments
     ///
     /// * `task_id` - The ID of the task to check
-    /// * `uid` - The user ID to verify
+    /// * `app_uid` - The app UID to verify
     ///
     /// # Returns
     ///
@@ -115,11 +115,11 @@ impl RequestServiceStub {
     ///
     /// The manager-permission check is not action-specific today.
     // TODO: permission should match action.
-    pub(crate) fn check_permission_or_uid(&self, task_id: u32, uid: u64) -> bool {
+    pub(crate) fn check_permission_or_app_uid(&self, task_id: u32, app_uid: u64) -> bool {
         let permission = PermissionChecker::check_manager();
         match permission.get_action() {
             Some(_a) => true,  // Manager permission granted
-            None => self.check_task_uid(task_id, uid), // Fall back to task ownership check
+            None => self.check_task_app_uid(task_id, app_uid), // Fall back to task ownership check
         }
     }
 }

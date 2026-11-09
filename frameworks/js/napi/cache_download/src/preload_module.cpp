@@ -397,6 +397,7 @@ void CallbackManager::InvokeErrorCallbacks(
 bool CheckInternetPermission()
 {
     static bool hasPermission = []() {
+        // Permission check is based on token (GetCallingFullTokenID + VerifyAccessToken).
         uint64_t tokenId = IPCSkeleton::GetCallingFullTokenID();
         TypeATokenTypeEnum tokenType = AccessTokenKit::GetTokenTypeFlag(static_cast<AccessTokenID>(tokenId));
         if (tokenType == TOKEN_INVALID) {
@@ -414,6 +415,7 @@ bool CheckInternetPermission()
 bool CheckNetworkInfoPermission()
 {
     static bool hasPermission = []() {
+        // Permission check is based on token (GetCallingFullTokenID + VerifyAccessToken).
         uint64_t tokenId = IPCSkeleton::GetCallingFullTokenID();
         TypeATokenTypeEnum tokenType = AccessTokenKit::GetTokenTypeFlag(static_cast<AccessTokenID>(tokenId));
         if (tokenType == TOKEN_INVALID) {

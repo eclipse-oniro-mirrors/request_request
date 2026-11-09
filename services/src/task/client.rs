@@ -218,6 +218,7 @@ pub(crate) fn build_client(
         // Add interceptor to check redirects against domain policy
         // This ensures that any URLs encountered during redirects also comply with
         // the domain access policies, providing comprehensive security coverage
+        // app_id here is the bundle name, not the new PC appid semantics.
         #[cfg(feature = "oh")]
         {
             let interceptors = DomainInterceptor::new(config.bundle.clone(), domain_type);

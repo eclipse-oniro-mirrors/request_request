@@ -84,7 +84,8 @@ impl RequestServiceStub {
         }
 
         // Get calling UID for ownership verification
-        let ipc_uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let ipc_app_uid = crate::utils::identity::calling_app_uid();
 
         // Initialize results vector with default error codes
         let mut vec = vec![ErrorCode::Other; len];
@@ -123,18 +124,18 @@ impl RequestServiceStub {
             }
 
             // Check task ownership or manager permissions
-            if (task_uid != ipc_uid) && !permission {
+            if (task_uid != ipc_app_uid) && !permission {
                 set_code_with_index(&mut vec, i, ErrorCode::TaskNotFound);
                 error!(
-                    "Service remove, failed: check task uid. tid: {}, uid: {}",
-                    task_id, ipc_uid
+                    "Service remove, failed: check task app uid. tid: {}, appUid: {}",
+                    task_id, ipc_app_uid
                 );
                 sys_event!(
                     ExecError,
                     DfxCode::INVALID_IPC_MESSAGE_A10,
                     &format!(
-                        "Service remove, failed: check task uid. tid: {}, uid: {}",
-                        task_id, ipc_uid
+                        "Service remove, failed: check task app uid. tid: {}, appUid: {}",
+                        task_id, ipc_app_uid
                     )
                 );
                 continue;

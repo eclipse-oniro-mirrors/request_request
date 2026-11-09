@@ -116,6 +116,7 @@ impl TaskManager {
             task.update_progress_in_database()
         }
 
+        // Application identity.
         match RequestDb::get_instance().get_task_info(task_id) {
             Some(info) if info.uid() == uid => Some(info),
             _ => {
@@ -155,6 +156,7 @@ impl TaskManager {
             }
         };
 
+        // Application identity.
         if info.uid() == uid && info.token() == token {
             info.bundle = "".to_string();
             Some(info)
@@ -221,6 +223,7 @@ impl RequestDb {
     ///
     /// Returns a vector of task IDs that match the user and filter criteria.
     pub(crate) fn search_task(&self, filter: TaskFilter, uid: u64) -> Vec<u32> {
+        // Application identity.
         let mut sql = format!("SELECT task_id from request_task WHERE uid = {} AND ", uid);
         Self::search_filter(&mut sql, &filter);
         self.query_integer(&sql)
@@ -294,6 +297,7 @@ impl RequestDb {
 /// Returns the MIME type as a string if the task exists and is owned by the
 /// specified user, otherwise an empty string.
 pub(crate) fn query_mime_type(uid: u64, task_id: u32) -> String {
+    // Application identity.
     match RequestDb::get_instance().get_task_info(task_id) {
         Some(info) if info.uid() == uid => info.mime_type(),
         _ => {

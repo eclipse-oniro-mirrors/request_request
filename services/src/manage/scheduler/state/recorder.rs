@@ -180,7 +180,7 @@ impl StateRecord {
     /// SQL statements to update the database with the new foreground
     /// application state.
     pub(crate) fn update_top_uid(&mut self, uid: u64) -> Option<SqlList> {
-        info!("update top uid {}", uid);
+        info!("update top appUid {}", uid);
         let mut sql_list = SqlList::new();
         sql_list.add_app_state_available(uid);
         self.foreground_abilities.insert(uid);

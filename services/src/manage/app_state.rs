@@ -114,6 +114,7 @@ impl AppStateListener {
 ///
 /// This function assumes `APP_STATE_LISTENER` has been properly initialized.
 extern "C" fn app_state_change_callback(uid: i32, state: i32, _pid: i32) {
+    // Process-level callback uid (from platform).
     // State 2 corresponds to application entering foreground
     if state == 2 {
         unsafe {
@@ -146,6 +147,7 @@ extern "C" fn app_state_change_callback(uid: i32, state: i32, _pid: i32) {
 ///
 /// This function assumes `APP_STATE_LISTENER` has been properly initialized.
 extern "C" fn process_died_callback(uid: i32, state: i32, pid: i32, bundle_name: CStringWrapper) {
+    // Process-level callback uid (from platform).
     debug!(
         "Receives process change, uid {} pid {} state {}",
         uid, pid, state
@@ -206,6 +208,7 @@ impl CommonEventSubscriber for AppUninstallSubscriber {
     /// * `want` - Event data structure containing the UID of the uninstalled
     ///   app.
     fn on_receive_event(&self, _code: i32, _data: String, want: CommonEventWant) {
+        // Process-level callback uid (from platform).
         // Extract the UID from the event data if available
         if let Some(uid) = want.get_int_param("uid") {
             info!("Receive app uninstall event, uid: {}", uid);

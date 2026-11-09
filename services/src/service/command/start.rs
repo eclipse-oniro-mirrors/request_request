@@ -86,7 +86,8 @@ impl RequestServiceStub {
         let mut vec = vec![ErrorCode::Other; len];
 
         // Get caller's UID for permission validation
-        let ipc_uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let ipc_app_uid = crate::utils::identity::calling_app_uid();
 
         // Process each task individually
         for i in 0..len {
@@ -123,18 +124,18 @@ impl RequestServiceStub {
             }
 
             // Check permission for cross-UID access
-            if (task_uid != ipc_uid) && !permission {
+            if (task_uid != ipc_app_uid) && !permission {
                 set_code_with_index(&mut vec, i, ErrorCode::TaskNotFound);
                 error!(
-                    "Service start, failed: check task uid. tid: {}, uid: {}",
-                    task_id, ipc_uid
+                    "Service start, failed: check task app uid. tid: {}, appUid: {}",
+                    task_id, ipc_app_uid
                 );
                 sys_event!(
                     ExecError,
                     DfxCode::INVALID_IPC_MESSAGE_A14,
                     &format!(
-                        "Service start, failed: check task uid. tid: {}, uid: {}",
-                        task_id, ipc_uid
+                        "Service start, failed: check task app uid. tid: {}, appUid: {}",
+                        task_id, ipc_app_uid
                     )
                 );
                 continue;

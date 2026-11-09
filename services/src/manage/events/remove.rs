@@ -43,7 +43,7 @@ impl TaskManager {
     /// delegated to the scheduler component.
     pub(crate) fn remove(&mut self, uid: u64, task_id: u32) -> ErrorCode {
         // Log the remove operation for debugging purposes
-        debug!("TaskManager remove,uid{} tid{}", uid, task_id);
+        debug!("TaskManager remove, appUid={} tid={}", uid, task_id);
 
         // Get database instance to check task status
         let db = RequestDb::get_instance();

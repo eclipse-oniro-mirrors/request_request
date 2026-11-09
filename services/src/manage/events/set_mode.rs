@@ -43,7 +43,7 @@ impl TaskManager {
     /// propagated back to the caller.
     pub(crate) fn set_mode(&mut self, uid: u64, task_id: u32, mode: Mode) -> ErrorCode {
         // Log the mode change operation for debugging purposes
-        debug!("TaskManager change_mode, tid{} mode{:?}", task_id, mode);
+        debug!("TaskManager change_mode, tid={} mode={:?}", task_id, mode);
 
         // Delegate to the scheduler to change the task mode
         match self.scheduler.task_set_mode(uid, task_id, mode) {

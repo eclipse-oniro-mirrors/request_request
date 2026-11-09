@@ -20,6 +20,8 @@
 pub(crate) mod c_wrapper;
 pub(crate) mod common_event;
 pub(crate) mod form_item;
+#[cfg(feature = "oh")]
+pub(crate) mod identity;
 pub(crate) mod vpn_dns;
 use std::collections::HashMap;
 use std::future::Future;

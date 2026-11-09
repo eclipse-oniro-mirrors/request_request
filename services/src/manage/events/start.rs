@@ -39,7 +39,7 @@ impl TaskManager {
     /// the caller.
     pub(crate) fn start(&mut self, uid: u64, task_id: u32) -> ErrorCode {
         // Log the task start operation for debugging purposes
-        debug!("TaskManager start, tid{}", task_id);
+        debug!("TaskManager start, tid={}", task_id);
 
         // Delegate to the scheduler to start the task execution
         match self.scheduler.start_task(uid, task_id) {

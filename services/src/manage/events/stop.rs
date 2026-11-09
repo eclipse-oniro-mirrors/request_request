@@ -43,7 +43,7 @@ impl TaskManager {
     /// it delegates the actual task termination to the scheduler.
     pub(crate) fn stop(&mut self, uid: u64, task_id: u32) -> ErrorCode {
         // Log the task stop operation for debugging purposes
-        debug!("TaskManager stop, tid{}", task_id);
+        debug!("TaskManager stop, tid={}", task_id);
 
         // Get database instance to check task status
         let db = RequestDb::get_instance();

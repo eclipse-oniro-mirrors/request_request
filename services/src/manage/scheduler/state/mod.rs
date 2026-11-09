@@ -92,7 +92,7 @@ impl Handler {
             for _ in 0..10 {
                 let res = GetForegroundAbilities(&mut foreground_abilities);
                 if res != 0 {
-                    error!("Get top uid failed, res: {}", res);
+                    error!("Get top appUid failed, res: {}", res);
                     // Wait 500ms before retry
                     std::thread::sleep(Duration::from_millis(500));
                 } else {

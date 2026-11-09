@@ -82,14 +82,15 @@ impl RequestServiceStub {
         };
 
         // Verify task ownership by checking UID
-        let uid = ipc::Skeleton::calling_uid();
-        if !self.check_task_uid(task_id, uid) {
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
+        if !self.check_task_app_uid(task_id, app_uid) {
             reply.write(&(ErrorCode::TaskNotFound as i32))?;
             return Err(IpcStatusCode::Failed);
         }
 
         // Retrieve MIME type from the query module
-        let mime = query::query_mime_type(uid, task_id);
+        let mime = query::query_mime_type(app_uid, task_id);
 
         // Send successful response with MIME type
         reply.write(&(ErrorCode::ErrOk as i32))?;

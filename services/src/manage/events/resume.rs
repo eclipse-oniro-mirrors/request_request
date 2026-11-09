@@ -40,7 +40,7 @@ impl TaskManager {
     /// to the caller.
     pub(crate) fn resume(&mut self, uid: u64, task_id: u32) -> ErrorCode {
         // Log the resume operation for debugging purposes
-        debug!("TaskManager resume, uid{} tid{}", uid, task_id);
+        debug!("TaskManager resume, appUid={} tid={}", uid, task_id);
 
         // Delegate to the scheduler to resume the task and handle any errors
         match self.scheduler.resume_task(uid, task_id) {

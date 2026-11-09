@@ -77,7 +77,8 @@ impl RequestServiceStub {
         }
 
         // Get calling process UID for permission verification
-        let uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
 
         // Initialize result vector with default error values
         let mut vec = vec![ErrorCode::Other; len];
@@ -117,39 +118,39 @@ impl RequestServiceStub {
                 continue;
             };
 
-            let mut uid = uid;
+            let mut app_uid = app_uid;
 
             // For privileged callers, get the actual task owner UID from database
             if permission {
                 // innerkits callers act on behalf of the task owner, so replace
                 // the caller's uid with the owner's uid from the database
                 match RequestDb::get_instance().query_task_uid(task_id) {
-                    Some(id) => uid = id,
+                    Some(id) => app_uid = id,
                     None => {
                         set_code_with_index(&mut vec, i, ErrorCode::TaskNotFound);
                         continue;
                     }
                 };
-            } else if !self.check_task_uid(task_id, uid) {
+            } else if !self.check_task_app_uid(task_id, app_uid) {
                 // Verify task ownership for non-privileged callers
                 set_code_with_index(&mut vec, i, ErrorCode::TaskNotFound);
                 error!(
-                    "Service set_max_speed, failed: check task uid. tid: {}, uid: {}",
-                    task_id, uid
+                    "Service set_max_speed, failed: check task app uid. tid: {}, appUid: {}",
+                    task_id, app_uid
                 );
                 sys_event!(
                     ExecError,
                     DfxCode::INVALID_IPC_MESSAGE_A42,
                     &format!(
-                        "Service set_max_speed, failed: check task uid. tid: {}, uid: {}",
-                        task_id, uid
+                        "Service set_max_speed, failed: check task app uid. tid: {}, appUid: {}",
+                        task_id, app_uid
                     )
                 );
                 continue;
             }
 
             // Create and send speed limit event to task manager
-            let (event, rx) = TaskManagerEvent::set_max_speed(uid, task_id, max_speed);
+            let (event, rx) = TaskManagerEvent::set_max_speed(app_uid, task_id, max_speed);
             if !self.task_manager.lock().unwrap().send_event(event) {
                 error!(
                     "Service set_max_speed, failed: task_manager err: {}",

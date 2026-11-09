@@ -48,7 +48,7 @@ impl TaskManager {
     pub(crate) fn set_max_speed(&mut self, uid: u64, task_id: u32, max_speed: i64) -> ErrorCode {
         // Log the set_max_speed operation for debugging purposes
         debug!(
-            "TaskManager set_max_speed, uid{}, tid{}, max_speed{}",
+            "TaskManager set_max_speed, uid={}, tid={}, max_speed={}",
             uid, task_id, max_speed
         );
 

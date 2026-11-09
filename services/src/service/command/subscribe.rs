@@ -67,17 +67,18 @@ impl RequestServiceStub {
         };
         
         // Get caller's UID for permission validation
-        let uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
 
         // Verify task ownership to prevent unauthorized access
-        if !self.check_task_uid(task_id, uid) {
+        if !self.check_task_app_uid(task_id, app_uid) {
             reply.write(&(ErrorCode::TaskNotFound as i32))?;
             return Err(IpcStatusCode::Failed);
         }
 
         // Get caller's process and token information for subscription tracking
         let pid = ipc::Skeleton::calling_pid();
-        let token_id = ipc::Skeleton::calling_full_token_id();
+        let token_id = crate::utils::identity::calling_token_id();
 
         // Create subscription event for the task manager
         let (event, rx) = TaskManagerEvent::subscribe(task_id, token_id);
@@ -134,7 +135,7 @@ impl RequestServiceStub {
         }
 
         // Register client with client manager for notification delivery
-        let ret = self.client_manager.subscribe(task_id, pid, uid, token_id);
+        let ret = self.client_manager.subscribe(task_id, pid, app_uid, token_id);
         if ret == ErrorCode::ErrOk {
             reply.write(&(ErrorCode::ErrOk as i32))?;
             debug!("End Service subscribe ok: tid: {}", task_id);
