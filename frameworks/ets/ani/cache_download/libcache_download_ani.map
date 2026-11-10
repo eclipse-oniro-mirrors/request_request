@@ -14,11 +14,6 @@
 {
   global:
     ANI_Constructor;
-    _RNvNtNtCs6tX3LniNBmR_10serde_core2de5impls14OSSTR_VARIANTS;
-    _RNvNvNvXsw_NtNtCs6tX3LniNBmR_10serde_core2de5implsNtNtCsjSKxjJHhRnY_4core4time8DurationNtBb_11Deserialize11deserialize14check_overflow13NANOS_PER_SEC;
-    _RNvNvNvXsx_NtNtCs6tX3LniNBmR_10serde_core2de5implsNtNtCs9HJyf42xcev_3std4time10SystemTimeNtBb_11Deserialize11deserialize14check_overflow13NANOS_PER_SEC;
-    _RNvNvXsm_NtNtCs6tX3LniNBmR_10serde_core2de5implsNtNtNtCsjSKxjJHhRnY_4core3net7ip_addr6IpAddrNtB9_11Deserialize11deserialize8VARIANTS;
-    _RNvNvXsn_NtNtCs6tX3LniNBmR_10serde_core2de5implsNtNtNtCsjSKxjJHhRnY_4core3net11socket_addr10SocketAddrNtB9_11Deserialize11deserialize8VARIANTS;
     rust_metadata_cache_download_ani_dd0a3b2c0375736f;
   local:
     *;
