@@ -52,8 +52,11 @@ enum NewTaskResult {
 pub struct CallbackWrapper {
     /// The user-provided callback implementation
     inner: Option<Box<dyn RequestCallback>>,
-    // TODO This reset flag has never been assigned to true. Does it look useless?
-    /// Flag indicating if the task should be reset
+    /// Flag requesting a restart after cancellation. Set by
+    /// `RequestTask::reset` (network recovery callback chain) via
+    /// `compare_exchange(false, true)`; consumed with a test-and-clear
+    /// `compare_exchange(true, false)` by `on_cancel` and
+    /// `wait_for_network_and_retry`.
     reset: Arc<AtomicBool>,
     /// Weak reference to the task to avoid memory leaks
     task: Weak<Mutex<SharedPtr<HttpClientTask>>>,
@@ -323,10 +326,16 @@ impl CallbackWrapper {
                     }
 
                     // Check passive network callback signal
-                    if reset.load(Ordering::SeqCst) {
+                    // Atomically test-and-clear: a RequestTask::reset() that
+                    // sets the flag after this CAS is observed by the next
+                    // check, so the restart signal is never lost nor
+                    // double-consumed.
+                    if reset
+                        .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok()
+                    {
                         // Network callback triggered, start retry
                         callback.tries += 1;
-                        reset.store(false, Ordering::SeqCst);
                         Self::start_new_task(task, callback);
                         return;
                     }
@@ -353,8 +362,15 @@ impl CallbackWrapper {
             return;
         };
 
-        // Check if a reset is requested
-        if self.reset.load(Ordering::SeqCst) {
+        // Atomically test-and-clear the reset flag: a concurrent
+        // RequestTask::reset() that sets the flag after this CAS will be
+        // observed by the next on_cancel, so the restart signal is never lost
+        // nor double-consumed.
+        if self
+            .reset
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
             // Attempt to create a new task for restarting
             let (new_task, new_callback) = match self.create_new_task(callback, request) {
                 NewTaskResult::Success(new_task, new_callback) => (new_task, new_callback),
@@ -364,9 +380,8 @@ impl CallbackWrapper {
                     return;
                 }
             };
-            // Start the new task and clear the reset flag
+            // Start the new task; the reset flag was already cleared by the CAS
             Self::start_new_task(new_task, new_callback);
-            self.reset.store(false, Ordering::SeqCst);
         } else {
             // No reset requested, just call the cancel callback
             callback.on_cancel();

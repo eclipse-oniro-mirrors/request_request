@@ -16,6 +16,8 @@
 #ifndef REQUEST_TASK_NAPI_H
 #define REQUEST_TASK_NAPI_H
 
+#include <atomic>
+
 #include "async_call.h"
 #include "js_notify_data_listener.h"
 #include "js_response_listener.h"
@@ -103,14 +105,15 @@ public:
 
     // Per-task state: config_ is the parsed creation config; isGetPermission
     // tracks whether the sandbox ACLs were granted for this task;
-    // register_ guards the one-per-process foreground-resume callback
-    // (see AppStateCallback); taskContextMap_ (taskMutex_) holds every task
-    // created in this process; the listeners receive the server's UDS
-    // pushes (responseListener_ for responses, notifyDataListenerMap_ per
-    // SubscribeType for events, listenerMutex_ guards the map).
+    // register_ (atomic, CAS-guarded) guards the one-per-process
+    // foreground-resume callback (see AppStateCallback); taskContextMap_
+    // (taskMutex_) holds every task created in this process; the listeners
+    // receive the server's UDS pushes (responseListener_ for responses,
+    // notifyDataListenerMap_ per SubscribeType for events, listenerMutex_
+    // guards the map).
     Config config_;
     bool isGetPermission;
-    static bool register_;
+    static std::atomic<bool> register_;
     static std::mutex taskMutex_;
     static std::map<std::string, std::shared_ptr<ContextInfo>> taskContextMap_;
 

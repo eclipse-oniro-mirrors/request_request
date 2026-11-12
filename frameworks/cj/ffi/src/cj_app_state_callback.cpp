@@ -40,10 +40,26 @@ void CJAppStateCallback::OnAbilityForeground(const int64_t &ability)
             }
         }
     }
-    if (!CJRequestTask::register_) {
+    // CAS clears the guard exactly once; a concurrent foreground-event
+    // handler or creator thread cannot also run the unregistration logic.
+    bool expected = true;
+    if (!CJRequestTask::register_.compare_exchange_strong(expected, false)) {
         return;
     }
-    CJRequestTask::register_ = false;
+    // Re-scan inside taskMutex_ before unregistering: a FOREGROUND task may
+    // have been created between the first scan above and this point (it is
+    // still registering or not yet visible in taskMap_). If one exists it
+    // still depends on this callback to resume the SA, so restore the guard
+    // and keep the callback registered.
+    {
+        std::lock_guard<std::mutex> lockGuard(CJRequestTask::taskMutex_);
+        for (auto &item : CJRequestTask::taskMap_) {
+            if (item.second->config_.mode == Mode::FOREGROUND) {
+                CJRequestTask::register_.store(true);
+                return;
+            }
+        }
+    }
     auto context = ApplicationContextCJ::CJApplicationContext::GetInstance();
     if (context == nullptr) {
         REQUEST_HILOGE("Get CjApplicationContext failed");

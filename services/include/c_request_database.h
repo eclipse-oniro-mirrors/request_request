@@ -183,6 +183,13 @@ private:
     // Protects `store_` against the swap performed by CheckAndRebuildDataBase;
     // readers copy the shared_ptr under the lock instead of using it directly.
     mutable std::shared_mutex storeMutex_;
+    // Serializes the delete+rebuild critical section of CheckAndRebuildDataBase:
+    // concurrent corruption reports would otherwise race, and the later
+    // DeleteRdbStore could remove the fresh store an earlier rebuild just
+    // created. Plain mutex on purpose (the rebuild path has no concurrent
+    // readers); lock order is strictly one-way rebuildMutex_ -> storeMutex_,
+    // so it never forms a cycle with `storeMutex_`.
+    mutable std::mutex rebuildMutex_;
     std::shared_ptr<OHOS::NativeRdb::RdbStore> store_;
 };
 

@@ -57,7 +57,7 @@ std::mutex JsTask::getTaskCreateMutex_;
 thread_local napi_ref JsTask::getTaskCreateCtor = nullptr;
 std::mutex JsTask::taskMutex_;
 std::map<std::string, std::shared_ptr<JsTask::ContextInfo>> JsTask::taskContextMap_;
-bool JsTask::register_ = false;
+std::atomic<bool> JsTask::register_{false};
 
 // Instance method table of the API10 Task class (request.agent): event
 // subscription plus lifecycle control, all dispatched through RequestEvent.
@@ -1366,16 +1366,19 @@ bool JsTask::Equals(napi_env env, napi_value value, napi_ref copy)
 }
 
 // Installs the process-wide foreground-resume callback (AppStateCallback)
-// on the first FOREGROUND task; the callback itself clears register_ when
-// the process no longer holds any foreground task, so a later foreground
+// on the first FOREGROUND task; register_ is set via atomic CAS so only one
+// creator wins the install. The callback side clears it (CAS) and only
+// unregisters itself when no foreground task is left, so a later foreground
 // task can re-register.
 void JsTask::RegisterForegroundResume()
 {
-    if (register_) {
-        return;
+    // CAS sets the guard exactly once: concurrent creators cannot both run
+    // the registration logic below.
+    bool expected = false;
+    if (!register_.compare_exchange_strong(expected, true)) {
+        return; // someone else already registering/registered
     }
     REQUEST_HILOGI("Process register foreground resume callback");
-    register_ = true;
     auto context = AbilityRuntime::ApplicationContext::GetInstance();
     if (context == nullptr) {
         REQUEST_HILOGE("End register foreground resume callback, failed: Get ApplicationContext failed");

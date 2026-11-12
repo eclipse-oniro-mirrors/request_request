@@ -20,7 +20,7 @@ use request_utils::fastrand::fast_random;
 use request_utils::task_id::TaskId;
 use request_utils::test::log::init;
 
-use super::{FILE_STORE_DIR, *};
+use super::*;
 const TEST_STRING: &str = "你这猴子真让我欢喜";
 const TEST_STRING_SIZE: usize = TEST_STRING.len();
 const TEST_SIZE: u64 = 128;
@@ -125,7 +125,7 @@ fn ut_cache_file_restore_files() {
 
     // The first to create are the first to come out
     init_curr_store_dir();
-    let path = unsafe { FILE_STORE_DIR.join(String::from(TEST_DIR)).unwrap() };
+    let path = join_curr_dir(String::from(TEST_DIR)).unwrap();
 
     fs::create_dir_all(&path).unwrap();
     for i in 0..10 {
