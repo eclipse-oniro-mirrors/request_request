@@ -21,7 +21,7 @@ use crate::manage::TaskManager;
 
 impl TaskManager {
     pub(crate) fn pause(&mut self, uid: u64, task_id: u32) -> ErrorCode {
-        debug!("TaskManager pause, uid{} tid{}", uid, task_id);
+        debug!("TaskManager pause, appUid={} tid={}", uid, task_id);
         match self.scheduler.pause_task(uid, task_id) {
             Ok(_) => ErrorCode::ErrOk,
             Err(e) => e,

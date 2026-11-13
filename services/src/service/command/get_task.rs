@@ -73,9 +73,10 @@ impl RequestServiceStub {
         };
 
         // Verify calling process has permission to access this task
-        let uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
 
-        if !self.check_task_uid(task_id, uid) {
+        if !self.check_task_app_uid(task_id, app_uid) {
             reply.write(&(ErrorCode::TaskNotFound as i32))?;
             return Err(IpcStatusCode::Failed);
         }
@@ -97,11 +98,11 @@ impl RequestServiceStub {
         };
 
         // Subscribe client to receive task updates
-        let token_id = ipc::Skeleton::calling_full_token_id();
+        let token_id = crate::utils::identity::calling_token_id();
         let pid = ipc::Skeleton::calling_pid();
 
         // Register client subscription with task manager
-        let ret = self.client_manager.subscribe(task_id, pid, uid, token_id);
+        let ret = self.client_manager.subscribe(task_id, pid, app_uid, token_id);
         if ret != ErrorCode::ErrOk {
             error!("End Service subscribe, tid: {}, failed: {:?}", task_id, ret);
             sys_event!(

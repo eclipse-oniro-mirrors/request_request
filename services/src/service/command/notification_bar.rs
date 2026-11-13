@@ -106,7 +106,8 @@ impl RequestServiceStub {
 
         // Record the caller UID as the group owner; attach_group / delete_group
         // verify ownership against it later.
-        let uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
 
         // Validate want_agent ownership before persisting: a non-system caller
         // may only set a want_agent whose target bundle belongs to it.
@@ -127,7 +128,7 @@ impl RequestServiceStub {
             disable,
             visibility,
             hide_stop_button,
-            uid,
+            app_uid,
         );
         reply.write(&new_group_id.to_string())?;
         Ok(())
@@ -175,7 +176,8 @@ impl RequestServiceStub {
         let task_ids = data.read::<Vec<String>>()?;
 
         // Get calling process UID for permission checks
-        let uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
 
         // Prepare vector for validated task IDs
         let mut parse_ids = Vec::with_capacity(task_ids.len());
@@ -191,16 +193,16 @@ impl RequestServiceStub {
                 reply.write(&(ErrorCode::TaskNotFound as i32))?;
                 return Ok(());
             };
-            if !self.check_task_uid(task_id, uid) {
+            if !self.check_task_app_uid(task_id, app_uid) {
                 error!(
-                    "End Service attach_group, task_id: {}, failed: task_id not belong to uid",
+                    "End Service attach_group, task_id: {}, failed: task_id not belong to appUid",
                     task_id
                 );
                 sys_event!(
                     ExecError,
                     DfxCode::INVALID_IPC_MESSAGE_A38,
                     &format!(
-                        "End Service attach_group, task_id: {}, failed: task_id not belong to uid",
+                        "End Service attach_group, task_id: {}, failed: task_id not belong to appUid",
                         task_id
                     )
                 );
@@ -210,7 +212,7 @@ impl RequestServiceStub {
             parse_ids.push(task_id);
         }
         // Create and send attach group event to task manager
-        let (event, rx) = TaskManagerEvent::attach_group(uid, parse_ids, group_id);
+        let (event, rx) = TaskManagerEvent::attach_group(app_uid, parse_ids, group_id);
         if !self.task_manager.lock().unwrap().send_event(event) {
             return Err(IpcStatusCode::Failed);
         }
@@ -277,8 +279,9 @@ impl RequestServiceStub {
             return Ok(());
         };
         let mut ret = ErrorCode::ErrOk;
-        let uid = ipc::Skeleton::calling_uid();
-        if !NotificationDispatcher::get_instance().delete_group(group_id, uid) {
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
+        if !NotificationDispatcher::get_instance().delete_group(group_id, app_uid) {
             ret = ErrorCode::GroupNotFound;
         }
         reply.write(&(ret as i32))?;
@@ -312,10 +315,11 @@ impl RequestServiceStub {
         // Initialize permission cache and read task IDs
         let mut permission = None; // Cache permission check result to avoid redundant checks
         let task_ids = data.read::<Vec<String>>()?;
-        let calling_uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
 
         for task_id in task_ids.iter() {
-            match self.disable_task_notification_inner(calling_uid, task_id, &mut permission) {
+            match self.disable_task_notification_inner(app_uid, task_id, &mut permission) {
                 Ok(()) => reply.write(&(ErrorCode::ErrOk as i32)),
                 Err(e) => {
                     error!("End Service disable_task_notifications, failed: {:?}", e);
@@ -338,7 +342,7 @@ impl RequestServiceStub {
     ///
     /// # Arguments
     ///
-    /// * `calling_uid` - UID of the calling process.
+    /// * `app_uid` - App UID of the calling process.
     /// * `task_id` - String representation of the task ID.
     /// * `permission` - Mutable reference to a permission cache to avoid redundant checks.
     ///
@@ -350,7 +354,7 @@ impl RequestServiceStub {
     ///   notifications for this task.
     fn disable_task_notification_inner(
         &self,
-        calling_uid: u64,
+        app_uid: u64,
         task_id: &str,
         permission: &mut Option<ManagerPermission>,
     ) -> Result<(), ErrorCode> {
@@ -364,7 +368,7 @@ impl RequestServiceStub {
             return Err(ErrorCode::TaskNotFound);
         };
         // Check if caller owns the task or has management permissions
-        if task_uid != calling_uid {
+        if task_uid != app_uid {
             // Use cached permission or perform permission check
             let permission = match permission {
                 Some(permission) => *permission,

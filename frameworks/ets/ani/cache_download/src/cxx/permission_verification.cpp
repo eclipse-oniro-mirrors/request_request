@@ -30,6 +30,7 @@ constexpr HiviewDFX::HiLogLabel LABEL = { LOG_CORE, 0xD001C50, "RequestCacheDown
 
 bool CheckInternetPermission()
 {
+    // Permission check is based on token (GetCallingFullTokenID + VerifyAccessToken).
     uint64_t tokenId = IPCSkeleton::GetCallingFullTokenID();
     TypeATokenTypeEnum tokenType = AccessTokenKit::GetTokenTypeFlag(static_cast<AccessTokenID>(tokenId));
     if (tokenType == TOKEN_INVALID) {

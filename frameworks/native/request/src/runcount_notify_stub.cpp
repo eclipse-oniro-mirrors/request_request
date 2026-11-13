@@ -87,6 +87,7 @@ bool RunCountNotifyStub::CheckCallingPermission(uint32_t code)
 {
     auto callerToken = IPCSkeleton::GetCallingTokenID();
     auto tokenType = Security::AccessToken::AccessTokenKit::GetTokenTypeFlag(callerToken);
+    // Process-level (Native caller uid check; EXPECT_UID is a system service).
     auto callerUid = IPCSkeleton::GetCallingUid();
     bool res = true;
     if (code != static_cast<uint32_t>(RequestNotifyInterfaceCode::REQUEST_NOTIFY_RUNCOUNT)) {

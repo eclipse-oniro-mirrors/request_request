@@ -32,6 +32,7 @@ cfg_oh! {
 
 cfg_not_oh! {
     use rusqlite::Connection;
+    // uid = application identity (app uid).
     const CREATE_TABLE: &'static str = "CREATE TABLE IF NOT EXISTS request_task (task_id INTEGER PRIMARY KEY, uid INTEGER, token_id INTEGER, action INTEGER, mode INTEGER, cover INTEGER, network INTEGER, metered INTEGER, roaming INTEGER, ctime INTEGER, mtime INTEGER, reason INTEGER, gauge INTEGER, retry INTEGER, redirect INTEGER, tries INTEGER, version INTEGER, config_idx INTEGER, begins INTEGER, ends INTEGER, precise INTEGER, priority INTEGER, background INTEGER, bundle TEXT, url TEXT, data TEXT, token TEXT, title TEXT, description TEXT, method TEXT, headers TEXT, config_extras TEXT, mime_type TEXT, state INTEGER, idx INTEGER, total_processed INTEGER, sizes TEXT, processed TEXT, extras TEXT, form_items BLOB, file_specs BLOB, each_file_status BLOB, body_file_names BLOB, certs_paths BLOB)";
 }
 use crate::config::Action;
@@ -315,9 +316,10 @@ impl RequestDb {
     #[cfg(feature = "oh")]
     pub(crate) fn insert_task(&self, task: RequestTask) -> bool {
         let task_id = task.task_id();
-        let uid = task.uid();
+        // uid = application identity (app uid).
+        let app_uid = task.uid();
 
-        debug!("Insert task to database, uid: {}, tid: {}", uid, task_id);
+        debug!("Insert task to database, appUid={} tid={}", app_uid, task_id);
 
         if self.contains_task(task_id) {
             return false;
@@ -325,7 +327,7 @@ impl RequestDb {
 
         let task_config = task.config();
         let config_set = task_config.build_config_set();
-        let c_task_config = task_config.to_c_struct(task_id, uid, &config_set);
+        let c_task_config = task_config.to_c_struct(task_id, app_uid, &config_set);
 
         let task_info = &task.info();
         let info_set = task_info.build_info_set();
@@ -355,8 +357,8 @@ impl RequestDb {
         use crate::utils::get_current_timestamp;
 
         let task_id = task.task_id();
-        let uid = task.uid();
-        info!("insert database, uid {} tid {}", uid, task_id);
+        let app_uid = task.uid();
+        info!("insert database, appUid={} tid={}", app_uid, task_id);
         if self.contains_task(task_id) {
             return false;
         }

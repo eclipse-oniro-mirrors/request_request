@@ -74,8 +74,9 @@ impl RequestServiceStub {
         }
 
         // Get caller information for permission checks and task association
-        let uid = ipc::Skeleton::calling_uid();
-        let token_id = ipc::Skeleton::calling_full_token_id();
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
+        let token_id = crate::utils::identity::calling_token_id();
         let pid = ipc::Skeleton::calling_pid();
         // Initialize results vector with default error values
         let mut vec = vec![(ErrorCode::Other, 0u32); len];
@@ -183,14 +184,14 @@ impl RequestServiceStub {
                 }
                 // Only disable notifications for background tasks
                 if matches!(mode, Mode::BackGround) {
-                    NotificationDispatcher::get_instance().disable_task_notification(uid, task_id);
+                    NotificationDispatcher::get_instance().disable_task_notification(app_uid, task_id);
                 }
             }
 
             debug!("Service construct: construct event sent to manager");
 
             // Subscribe the client to receive task notifications
-            let ret = self.client_manager.subscribe(task_id, pid, uid, token_id);
+            let ret = self.client_manager.subscribe(task_id, pid, app_uid, token_id);
             if ret != ErrorCode::ErrOk {
                 error!("End Service subscribe, tid: {}, failed: {:?}", task_id, ret);
                 sys_event!(

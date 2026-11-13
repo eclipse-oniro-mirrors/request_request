@@ -64,10 +64,11 @@ impl RequestServiceStub {
         };
         
         // Get caller's UID for permission validation
-        let uid = ipc::Skeleton::calling_uid();
+        // Application identity.
+        let app_uid = crate::utils::identity::calling_app_uid();
 
         // Verify task ownership to prevent unauthorized access
-        if !self.check_task_uid(task_id, uid) {
+        if !self.check_task_app_uid(task_id, app_uid) {
             reply.write(&(ErrorCode::TaskNotFound as i32))?;
             return Err(IpcStatusCode::Failed);
         }

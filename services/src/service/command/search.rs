@@ -57,9 +57,10 @@ impl RequestServiceStub {
             }
             SearchMethod::System(bundle)
         } else {
-            let uid = ipc::Skeleton::calling_uid();
-            debug!("Service user search: uid is {}", uid);
-            SearchMethod::User(uid)
+            // Application identity.
+            let app_uid = crate::utils::identity::calling_app_uid();
+            debug!("Service user search: app uid is {}", app_uid);
+            SearchMethod::User(app_uid)
         };
 
         // Read time range filters

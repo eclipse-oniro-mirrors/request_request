@@ -37,7 +37,7 @@ use crate::manage::account::GetOhosAccountUid;
 use crate::manage::network::{NetworkState, NetworkType};
 use crate::utils::c_wrapper::{CFileSpec, CFormItem, CStringWrapper};
 use crate::utils::form_item::{FileSpec, FormItem};
-use crate::utils::{hashmap_to_string, is_calling_atomic_service, query_calling_bundle};
+use crate::utils::{hashmap_to_string, is_calling_atomic_service};
 
 // C++ bridge for exposing Rust types to C++
 #[cxx::bridge(namespace = "OHOS::Request")]
@@ -681,10 +681,12 @@ impl Deserialize for TaskConfig {
         let proxy: String = parcel.read()?;
         let certificate_pins: String = parcel.read()?;
 
-        // Get caller information from IPC context
-        let bundle = query_calling_bundle();
-        let uid = ipc::Skeleton::calling_uid();
-        let token_id = ipc::Skeleton::calling_full_token_id();
+        // Get caller information from IPC context (single identity helper entry).
+        let identity = crate::utils::identity::calling_app_identity();
+        let bundle = identity.bundle;
+        // Application identity.
+        let app_uid = identity.app_uid;
+        let token_id = identity.token_id;
 
         // Verify bundle_type against the trusted identity source.
         // bundle_type is read from the IPC parcel (client-supplied, untrusted) and
@@ -873,7 +875,7 @@ impl Deserialize for TaskConfig {
             certs_path,
             common_data: CommonTaskConfig {
                 task_id: 0,
-                uid,
+                uid: app_uid,
                 token_id,
                 action,
                 mode,
