@@ -23,9 +23,11 @@ namespace Request {
 // App lifecycle callback used to recover from a missing download_server SA:
 // when the app returns to the foreground it retries loading the SA if any
 // foreground-mode task is waiting, and unregisters itself once no such task
-// exists. Registered at most once per process by
-// JsTask::RegisterForegroundResume (guarded by JsTask::register_); every
-// lifecycle method except OnAbilityForeground is an intentional no-op.
+// exists (with an atomic-CAS guard and a locked re-scan against a task
+// appearing mid-unregister). Registered at most once per process by
+// JsTask::RegisterForegroundResume (guarded by the atomic
+// JsTask::register_); every lifecycle method except OnAbilityForeground is
+// an intentional no-op.
 class AppStateCallback
     : public OHOS::AbilityRuntime::AbilityLifecycleCallback, public std::enable_shared_from_this<AppStateCallback> {
 public:

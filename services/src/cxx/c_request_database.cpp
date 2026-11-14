@@ -78,23 +78,40 @@ RequestDataBase::RequestDataBase(std::string path, bool encryptStatus)
 
 void RequestDataBase::CheckAndRebuildDataBase(int errCode)
 {
-    if (errCode == OHOS::NativeRdb::E_SQLITE_CORRUPT) {
-        REQUEST_HILOGE("Database corruption : %{public}d, path: %{public}s", errCode, path_.c_str());
-        // Rebuild the database this instance was opened with (per-user under
-        // multi-instance); rebuilding a hardcoded path would silently point
-        // this instance at another user's (or the legacy) database.
-        int errCode = OHOS::NativeRdb::RdbHelper::DeleteRdbStore(path_);
-        if (errCode != OHOS::NativeRdb::E_OK) {
-            REQUEST_HILOGE("delete database failed: %{public}d", errCode);
-            return;
-        }
-        // Build outside the lock, then swap under the lock so concurrent
-        // readers keep a valid (ref-counted) handle of the old store.
-        std::shared_ptr<OHOS::NativeRdb::RdbStore> newStore;
-        BuildDatabase(path_, encryptStatus_, newStore);
-        std::unique_lock<std::shared_mutex> lock(storeMutex_);
-        store_ = std::move(newStore);
+    // Check before taking any lock: the vast majority of calls carry a
+    // non-corrupt code and must not block behind a rebuild that can take
+    // seconds (BuildDatabase retries 10 times).
+    if (errCode != OHOS::NativeRdb::E_SQLITE_CORRUPT) {
+        return;
     }
+    REQUEST_HILOGE("Database corruption : %{public}d, path: %{public}s", errCode, path_.c_str());
+    // Serialize delete+rebuild: concurrent corruption reports would race, and
+    // the later DeleteRdbStore could remove the fresh store an earlier rebuild
+    // just created. Holding rebuildMutex_ for the whole rebuild (including
+    // BuildDatabase) is what closes that window.
+    std::lock_guard<std::mutex> rebuildLock(rebuildMutex_);
+    // Rebuild the database this instance was opened with (per-user under
+    // multi-instance); rebuilding a hardcoded path would silently point
+    // this instance at another user's (or the legacy) database.
+    int delErrCode = OHOS::NativeRdb::RdbHelper::DeleteRdbStore(path_);
+    if (delErrCode != OHOS::NativeRdb::E_OK) {
+        REQUEST_HILOGE("delete database failed: %{public}d", delErrCode);
+        return;
+    }
+    std::shared_ptr<OHOS::NativeRdb::RdbStore> newStore;
+    BuildDatabase(path_, encryptStatus_, newStore);
+    // Null guard: if all 10 BuildDatabase retries failed, keep the old
+    // store_ handle rather than binding a null store and permanently
+    // disabling every later DB operation on this instance.
+    if (newStore == nullptr) {
+        REQUEST_HILOGE("rebuild database failed, keep previous store, path: %{public}s", path_.c_str());
+        return;
+    }
+    // Swap under the lock so concurrent readers keep a valid (ref-counted)
+    // handle of the old store. Lock order is one-way rebuildMutex_ ->
+    // storeMutex_, so no lock cycle is possible.
+    std::unique_lock<std::shared_mutex> lock(storeMutex_);
+    store_ = std::move(newStore);
 }
 
 std::shared_ptr<OHOS::NativeRdb::RdbStore> RequestDataBase::AcquireStore()

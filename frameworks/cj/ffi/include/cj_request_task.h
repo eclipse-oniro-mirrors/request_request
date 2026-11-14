@@ -74,7 +74,7 @@ public:
     static void ResetDirAccess(const std::string &filepath);
     static void RemoveDirsPermission(const std::vector<std::string> &dirs);
 
-    static bool register_;
+    static std::atomic<bool> register_;
     static void RegisterForegroundResume();
 
     static bool SetPathPermission(const std::string &filepath, bool needWritePermission = true);

@@ -27,8 +27,10 @@ namespace Request {
 // 1. SA already up — nothing to recover.
 // 2. SA down and some live FOREGROUND-mode task exists — retry
 //    LoadRequestServer (foreground tasks cannot run without the SA).
-// 3. SA down but no foreground task left — this callback has no further
-//    purpose; unregister itself from the ApplicationContext.
+// 3. SA down but no foreground task left — clear the register_ guard via
+//    CAS, re-scan the task table under taskMutex_ (a FOREGROUND task may
+//    have appeared in the window), and only then unregister itself from
+//    the ApplicationContext.
 void AppStateCallback::OnAbilityForeground(const AbilityRuntime::AbilityLifecycleCallbackArgs &ability)
 {
     if (RequestManager::GetInstance()->IsSaReady()) {
@@ -55,12 +57,29 @@ void AppStateCallback::OnAbilityForeground(const AbilityRuntime::AbilityLifecycl
         ffrt::submit([]() mutable { RequestManager::GetInstance()->LoadRequestServer(); });
         return;
     }
-    if (!JsTask::register_) {
+    // CAS clears the guard exactly once; a concurrent foreground-event
+    // handler or creator thread cannot also run the unregistration logic.
+    bool expected = true;
+    if (!JsTask::register_.compare_exchange_strong(expected, false)) {
         return;
     }
-    // One-shot: reset the guard so a later RegisterForegroundResume can
-    // install a fresh callback, then drop this one.
-    JsTask::register_ = false;
+    // Re-scan inside taskMutex_ before unregistering: a FOREGROUND task may
+    // have been created between the first scan above and this point (it is
+    // still registering or not yet visible in taskContextMap_). If one
+    // exists it still depends on this callback to resume the SA, so restore
+    // the guard and keep the callback registered.
+    {
+        std::lock_guard<std::mutex> lockGuard(JsTask::taskMutex_);
+        for (auto it = JsTask::taskContextMap_.begin(); it != JsTask::taskContextMap_.end(); ++it) {
+            if (it->second->task == nullptr) {
+                continue;
+            }
+            if (it->second->config.mode == Mode::FOREGROUND) {
+                JsTask::register_.store(true);
+                return;
+            }
+        }
+    }
     auto context = AbilityRuntime::ApplicationContext::GetInstance();
     if (context == nullptr) {
         REQUEST_HILOGE("Get ApplicationContext failed");

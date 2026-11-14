@@ -17,7 +17,9 @@
 //!
 //! This module provides functionality for managing file-based caches,
 //! including:
-//! - Directory management for cache storage
+//! - Directory management for cache storage (current and history directories
+//!   are held in `OnceLock`s initialized by `init_curr_store_dir` /
+//!   `init_history_store_dir`)
 //! - File cache creation, restoration, and deletion
 //! - Synchronization between RAM and disk storage
 //! - Directory observation for cache maintenance
@@ -30,7 +32,7 @@ use std::io::{self, Seek, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
 
 use request_utils::task_id::TaskId;
@@ -45,24 +47,20 @@ use crate::manage::CacheManager;
 /// and are considered invalid.
 const FINISH_SUFFIX: &str = "_F";
 
-/// Global file store directory manager.
+/// Current cache directory, initialized exactly once by `init_curr_store_dir`.
 ///
-/// This static variable manages the directories used for storing cache files.
-/// It is initialized on first use through the `init_history_store_dir` and
-/// `init_curr_store_dir` functions.
-pub(crate) static mut FILE_STORE_DIR: FileStoreDir = FileStoreDir::new();
+/// Reads through `OnceLock::get` establish the necessary happens-before
+/// relation with the initializing write, so no unsynchronized access is
+/// possible.
+static CURR_STORE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-/// One-time initialization flag for history directory.
+/// History directory spawner, initialized exactly once by
+/// `init_history_store_dir`.
 ///
-/// Ensures the history directory is initialized exactly once across all
-/// threads.
-static INIT_HISTORY: Once = Once::new();
-
-/// One-time initialization flag for current directory.
-///
-/// Ensures the current directory is initialized exactly once across all
-/// threads.
-static INIT_CURR: Once = Once::new();
+/// Reads through `OnceLock::get` establish the necessary happens-before
+/// relation with the initializing write, so no unsynchronized access is
+/// possible.
+static HISTORY_STORE_DIR: OnceLock<DirObservSpawner> = OnceLock::new();
 
 /// Initializes the history directory for cache storage.
 ///
@@ -77,21 +75,17 @@ static INIT_CURR: Once = Once::new();
 /// This function is thread-safe and will only initialize the history directory
 /// once.
 pub fn init_history_store_dir(history: Arc<HistoryDir>, spawner: fn(PathBuf, Arc<HistoryDir>)) {
-    INIT_HISTORY.call_once(|| {
-        {
-            // Get current directory and start observation
-            let curr_dir = get_curr_store_dir();
-            let mut is_observe = history.is_observe.lock().unwrap();
-            spawner(curr_dir, history.clone());
-            *is_observe = true;
-        }
-        // SAFETY: This is the only place where FILE_STORE_DIR is modified concurrently,
-        // and it's protected by INIT_HISTORY which ensures it's initialized exactly
-        // once.
-        unsafe {
-            FILE_STORE_DIR.set_history_dir(history, spawner);
-        }
-    });
+    {
+        // Get current directory and start observation
+        let curr_dir = get_curr_store_dir();
+        let mut is_observe = history.is_observe.lock().unwrap();
+        spawner(curr_dir, history.clone());
+        *is_observe = true;
+    }
+    // `set()` keeps the explicit init-time semantics of the old `call_once`:
+    // the side effects above still run exactly once, and a racing second
+    // caller's value is dropped — both callers derive the same state.
+    let _ = HISTORY_STORE_DIR.set(DirObservSpawner::new(history, spawner));
 }
 
 /// Initializes the current directory for cache storage.
@@ -102,15 +96,12 @@ pub fn init_history_store_dir(history: Arc<HistoryDir>, spawner: fn(PathBuf, Arc
 /// This function is thread-safe and will only initialize the current directory
 /// once.
 pub fn init_curr_store_dir() {
-    INIT_CURR.call_once(|| {
-        let curr_dir = get_curr_store_dir();
-        // SAFETY: This is the only place where FILE_STORE_DIR's curr field is modified
-        // concurrently, and it's protected by INIT_CURR which ensures it's
-        // initialized exactly once.
-        unsafe {
-            FILE_STORE_DIR.set_curr_dir(curr_dir);
-        }
-    });
+    let curr_dir = get_curr_store_dir();
+    // `set()` keeps the explicit init-time semantics of the old `call_once`
+    // (the `create_dir_all` side effect happens at init, not at first read);
+    // the second caller's value is dropped — both callers derive the same
+    // path.
+    let _ = CURR_STORE_DIR.set(curr_dir);
 }
 
 /// Gets the path to the current cache directory.
@@ -150,125 +141,57 @@ pub fn get_curr_store_dir() -> PathBuf {
 ///
 /// # Returns
 /// `true` if the history directory has been initialized, `false` otherwise
-///
-/// # Safety
-/// This function only performs a read operation on the FILE_STORE_DIR, which is
-/// safe.
 pub fn is_history_init() -> bool {
-    // SAFETY: This is a read-only operation on FILE_STORE_DIR, which is
-    // thread-safe.
-    unsafe { FILE_STORE_DIR.history.is_some() }
+    HISTORY_STORE_DIR.get().is_some()
 }
 
-/// Manages directories used for storing cache files.
+/// Returns the current store directory after ensuring it exists.
 ///
-/// This struct keeps track of both the current and history directories used for
-/// storing cache files, providing methods to check existence, join paths, and
-/// ensure directories are created when needed.
-pub struct FileStoreDir {
-    /// History directory for file caching
-    history: Option<DirObservSpawner>,
-    /// Current directory for file caching
-    curr: Option<PathBuf>,
+/// Mirrors the semantics of the former `FileStoreDir::exist()`: ensures the
+/// history directory exists (spawning observation if it was just created) and
+/// creates the current directory if needed.
+///
+/// # Returns
+/// The current directory path if it is initialized and usable, None otherwise
+fn curr_dir_checked() -> Option<&'static Path> {
+    let curr = CURR_STORE_DIR.get()?;
+    // Ensure history directory exists
+    if let Some(history) = HISTORY_STORE_DIR.get() {
+        if !history.exist() && history.create() {
+            history.spawn_observe(curr.clone());
+        }
+    }
+    // Ensure current directory exists
+    if !curr.is_dir() {
+        if let Err(e) = fs::create_dir_all(curr.as_path()) {
+            error!("try create current cache dir error {}", e);
+            return None;
+        }
+    }
+    Some(curr.as_path())
 }
 
-impl FileStoreDir {
-    /// Creates a new empty FileStoreDir.
-    ///
-    /// Both history and current directories are initialized as None.
-    pub const fn new() -> Self {
-        Self {
-            history: None,
-            curr: None,
-        }
-    }
+/// Joins a path to the current store directory.
+///
+/// Ensures the directory exists before joining.
+///
+/// # Arguments
+/// * `path` - Path to join with the current directory
+///
+/// # Returns
+/// Joined path if the directory exists, None otherwise
+fn join_curr_dir(path: String) -> Option<PathBuf> {
+    Some(curr_dir_checked()?.join(path))
+}
 
-    /// Sets the history directory for file caching.
-    ///
-    /// # Arguments
-    /// * `history` - The history directory to use
-    /// * `spawner` - Function to spawn directory observation process
-    pub fn set_history_dir(
-        &mut self,
-        history: Arc<HistoryDir>,
-        spawner: fn(PathBuf, Arc<HistoryDir>),
-    ) {
-        self.history = Some(DirObservSpawner::new(history, spawner));
-    }
-
-    /// Sets the current directory for file caching.
-    ///
-    /// # Arguments
-    /// * `curr` - Path to the current directory
-    pub fn set_curr_dir(&mut self, curr: PathBuf) {
-        self.curr = Some(curr);
-    }
-
-    /// Gets a reference to the current directory path.
-    ///
-    /// # Safety
-    /// This method assumes that curr is not None, which is guaranteed by
-    /// init_curr_store_dir.
-    fn curr(&self) -> &PathBuf {
-        self.curr.as_ref().unwrap()
-    }
-
-    /// Checks if the directory exists and creates it if necessary.
-    ///
-    /// Ensures both history and current directories exist, creating them if
-    /// needed. Also starts directory observation if the history directory
-    /// was just created.
-    ///
-    /// # Returns
-    /// `true` if the directories exist (or were created successfully), `false`
-    /// otherwise
-    pub(crate) fn exist(&self) -> bool {
-        // Ensure history directory exists
-        if let Some(ref history) = self.history {
-            if !history.exist() && history.create() {
-                history.spawn_observe(self.curr().clone());
-            }
-        }
-        // Ensure current directory exists
-        if !self.curr().is_dir() {
-            if let Err(e) = fs::create_dir_all(self.curr().as_path()) {
-                error!("try create current cache dir error {}", e);
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Joins a path to the current directory.
-    ///
-    /// Ensures the directory exists before joining.
-    ///
-    /// # Arguments
-    /// * `path` - Path to join with the current directory
-    ///
-    /// # Returns
-    /// Joined path if the directory exists, None otherwise
-    pub(crate) fn join(&self, path: String) -> Option<PathBuf> {
-        if self.exist() {
-            Some(self.curr().join(path))
-        } else {
-            None
-        }
-    }
-
-    /// Gets a reference to the current directory path.
-    ///
-    /// Ensures the directory exists before returning.
-    ///
-    /// # Returns
-    /// Reference to the current directory path if it exists, None otherwise
-    pub(crate) fn as_path(&self) -> Option<&Path> {
-        if self.exist() {
-            Some(self.curr().as_path())
-        } else {
-            None
-        }
-    }
+/// Gets the current store directory as a path.
+///
+/// Ensures the directory exists before returning.
+///
+/// # Returns
+/// The current directory path if it exists, None otherwise
+fn curr_dir_as_path() -> Option<&'static Path> {
+    curr_dir_checked()
 }
 
 /// Manages directory observation for cache maintenance.
@@ -550,8 +473,7 @@ impl FileCache {
     /// # Returns
     /// Path to the cache file if the directory exists, None otherwise
     pub(crate) fn path(task_id: &TaskId) -> Option<PathBuf> {
-        // SAFETY: This is a read-only operation that joins a path
-        unsafe { FILE_STORE_DIR.join(task_id.to_string() + FINISH_SUFFIX) }
+        join_curr_dir(task_id.to_string() + FINISH_SUFFIX)
     }
 }
 
@@ -593,8 +515,7 @@ impl FileCacheInfo {
 ///
 /// Returns `None` if the cache directory has not been initialized.
 pub(crate) fn get_cached_files_info() -> Option<impl Iterator<Item = FileCacheInfo>> {
-    // SAFETY: This is a read-only operation to get the path
-    unsafe { FILE_STORE_DIR.as_path() }.map(get_info_from_path)
+    curr_dir_as_path().map(get_info_from_path)
 }
 
 /// Scans a directory and returns metadata for each valid cache file, sorted

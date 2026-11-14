@@ -55,7 +55,7 @@ std::mutex CJRequestTask::pathMutex_;
 std::map<std::string, int32_t> CJRequestTask::pathMap_;
 std::map<std::string, std::tuple<bool, bool, uint32_t>> CJRequestTask::pathMapV2_;
 
-bool CJRequestTask::register_ = false;
+std::atomic<bool> CJRequestTask::register_{false};
 
 static constexpr int ACL_SUCC = 0;
 static const std::string SA_PERMISSION_RWX = "g:3815:rwx";
@@ -301,9 +301,12 @@ void CJRequestTask::AddPathMap(const std::string &filepath, const std::string &b
 {
     std::string childDir(filepath);
     std::string parentDir;
+    // Hold pathMutex_ across the whole walk: per-iteration locking let a
+    // concurrent RemovePathMap erase an ancestor between iterations,
+    // revoking ACLs a task in flight still needs (or leaking them).
+    std::lock_guard<std::mutex> lockGuard(CJRequestTask::pathMutex_);
     while (childDir.length() > baseDir.length()) {
         parentDir = childDir.substr(0, childDir.rfind("/"));
-        std::lock_guard<std::mutex> lockGuard(CJRequestTask::pathMutex_);
         auto it = pathMap_.find(parentDir);
         if (it == pathMap_.end()) {
             pathMap_[parentDir] = 1;
@@ -341,9 +344,13 @@ void CJRequestTask::RemovePathMap(const std::string &filepath)
 
     std::string childDir(filepath);
     std::string parentDir;
+    // Hold pathMutex_ across the whole walk (mirrors AddPathMap): the chmod
+    // above stays outside the lock since it touches the file itself, not
+    // pathMap_. ResetDirAccess stays inside so an erase cannot interleave
+    // with a concurrent AddPathMap on the same ancestor.
+    std::lock_guard<std::mutex> lockGuard(CJRequestTask::pathMutex_);
     while (childDir.length() > baseDir.length()) {
         parentDir = childDir.substr(0, childDir.rfind("/"));
-        std::lock_guard<std::mutex> lockGuard(CJRequestTask::pathMutex_);
         auto it = pathMap_.find(parentDir);
         if (it != pathMap_.end()) {
             if (pathMap_[parentDir] <= 1) {
@@ -385,10 +392,12 @@ void CJRequestTask::RemoveDirsPermission(const std::vector<std::string> &dirs)
 
 void CJRequestTask::RegisterForegroundResume()
 {
-    if (register_) {
-        return;
+    // CAS sets the guard exactly once: concurrent creators cannot both run
+    // the registration logic below.
+    bool expected = false;
+    if (!register_.compare_exchange_strong(expected, true)) {
+        return; // someone else already registering/registered
     }
-    register_ = true;
     auto context = ApplicationContextCJ::CJApplicationContext::GetInstance();
     if (context == nullptr) {
         REQUEST_HILOGE("Get ApplicationContext failed");
