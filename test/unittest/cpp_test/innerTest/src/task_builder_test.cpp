@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstring>
 #include <sstream>
+#include <string>
 #define private public
 #define protected public
 
@@ -30,6 +31,20 @@ using namespace OHOS::Request;
 
 #undef private
 #undef protected
+
+// GetHostnameFromURL is a free helper declared in js_initialize.h and defined
+// in task_builder.cpp. Re-declared here to avoid pulling the NAPI header into
+// this suite.
+namespace OHOS::Request {
+std::string GetHostnameFromURL(const std::string &url);
+}
+
+namespace {
+// Shared loopback fixture host/URL; every URL variant below is built from
+// these so no case repeats the full address.
+const std::string LOCAL_HOST = "127.0.0.1";
+const std::string LOCAL_URL = "https://" + LOCAL_HOST + "/data.txt";
+} // namespace
 
 class TaskBuilderTest : public testing::Test {
 public:
@@ -1526,4 +1541,50 @@ HWTEST_F(TaskBuilderTest, setMinSpeed004, TestSize.Level1)
     EXPECT_EQ(builder.config.url, "https://127.0.0.1/data.txt");
     EXPECT_EQ(builder.config.minSpeed.speed, 5120);
     EXPECT_EQ(builder.config.minSpeed.duration, 120);
+}
+
+/**
+ * @tc.name: GetHostnameFromURL001
+ * @tc.desc: GetHostnameFromURL extracts the host from URLs with paths, ports,
+ *           query strings, and URLs without a trailing separator
+ * @tc.precon: NA
+ * @tc.step: 1. Call GetHostnameFromURL with a plain https URL
+ *           2. Call with a port, a query string, and no trailing path
+ *           3. Call with a scheme-less URL
+ * @tc.expect: The host is returned without port, path or query
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, GetHostnameFromURL001, TestSize.Level1)
+{
+    EXPECT_EQ(GetHostnameFromURL(LOCAL_URL), LOCAL_HOST);
+    EXPECT_EQ(GetHostnameFromURL("http://" + LOCAL_HOST + ":8080/dir"), LOCAL_HOST);
+    EXPECT_EQ(GetHostnameFromURL("https://" + LOCAL_HOST + "/path?q=1"), LOCAL_HOST);
+    EXPECT_EQ(GetHostnameFromURL("https://" + LOCAL_HOST), LOCAL_HOST);
+    EXPECT_EQ(GetHostnameFromURL(LOCAL_HOST + "/file"), LOCAL_HOST);
+}
+
+/**
+ * @tc.name: GetHostnameFromURL002
+ * @tc.desc: GetHostnameFromURL on an empty URL, backslash separators and
+ *           leading double-slash hosts
+ * @tc.precon: NA
+ * @tc.step: 1. Call GetHostnameFromURL with an empty string
+ *           2. Call with backslash separators
+ *           3. Call with scheme-relative and triple-slash prefixes
+ * @tc.expect: Empty yields empty; backslashes act like slashes and extra
+ *             leading slashes are skipped
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, GetHostnameFromURL002, TestSize.Level1)
+{
+    EXPECT_EQ(GetHostnameFromURL(""), "");
+    EXPECT_EQ(GetHostnameFromURL("https:\\\\" + LOCAL_HOST + "\\dir"), LOCAL_HOST);
+    EXPECT_EQ(GetHostnameFromURL("//" + LOCAL_HOST + "/dir"), LOCAL_HOST);
+    EXPECT_EQ(GetHostnameFromURL("///" + LOCAL_HOST), LOCAL_HOST);
+    EXPECT_EQ(GetHostnameFromURL("https://" + LOCAL_HOST + "/"), LOCAL_HOST);
+    EXPECT_EQ(GetHostnameFromURL("https://"), "");
 }

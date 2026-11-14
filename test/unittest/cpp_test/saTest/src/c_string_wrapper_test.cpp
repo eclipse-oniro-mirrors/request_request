@@ -80,3 +80,32 @@ HWTEST_F(StringWrapperTest, WrapperCStringTest_001, TestSize.Level1)
     char *str1 = new char[10];
     DeleteChar(str1);
 }
+
+/**
+ * @tc.name: WrapperCStringTest_002
+ * @tc.desc: WrapperCString with an empty string wraps a null pointer, and a
+ *           one-character string wraps the exact byte
+ * @tc.precon: NA
+ * @tc.step: 1. Wrap an empty std::string and check length and pointer
+ *           2. Wrap a one-character string and verify its byte
+ *           3. Free the wrapped buffer with DeleteChar
+ * @tc.expect: Empty input yields len 0 with a null cStr; the single byte is
+ *             preserved
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(StringWrapperTest, WrapperCStringTest_002, TestSize.Level1)
+{
+    std::string empty;
+    CStringWrapper ret = WrapperCString(empty);
+    EXPECT_EQ(ret.len, 0u);
+    EXPECT_EQ(ret.cStr, nullptr);
+
+    std::string one("A");
+    CStringWrapper single = WrapperCString(one);
+    EXPECT_EQ(single.len, 1u);
+    ASSERT_NE(single.cStr, nullptr);
+    EXPECT_EQ(single.cStr[0], 'A');
+    DeleteChar(single.cStr);
+}

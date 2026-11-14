@@ -28,9 +28,8 @@
 #include "log.h"
 #include "request_common.h"
 #include "request_manager_impl.h"
-
-#include "want_agent_helper.h"
 #include "want_agent.h"
+#include "want_agent_helper.h"
 
 using namespace testing::ext;
 using namespace OHOS::Request;
@@ -749,4 +748,27 @@ HWTEST_F(RequestManagerTest, VisibilityValuesTest001, TestSize.Level1)
 
     Notification defaultNotification;
     EXPECT_EQ(defaultNotification.visibility, 0b01);
+}
+
+/**
+ * @tc.name: GetInstanceTwiceTest001
+ * @tc.desc: RequestManager::GetInstance always returns the same singleton and
+ *           repeated calls do not create a second instance
+ * @tc.precon: NA
+ * @tc.step: 1. Fetch the instance twice into const references
+ *           2. Verify neither handle is null
+ *           3. Compare the underlying pointers of both handles
+ * @tc.expect: Both references wrap the same unique_ptr holding one shared object
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerTest, GetInstanceTwiceTest001, TestSize.Level1)
+{
+    const std::unique_ptr<RequestManager> &first = RequestManager::GetInstance();
+    const std::unique_ptr<RequestManager> &second = RequestManager::GetInstance();
+    EXPECT_NE(first.get(), nullptr);
+    EXPECT_NE(second.get(), nullptr);
+    EXPECT_EQ(first.get(), second.get());
+    EXPECT_EQ(first.get(), RequestManager::GetInstance().get());
 }

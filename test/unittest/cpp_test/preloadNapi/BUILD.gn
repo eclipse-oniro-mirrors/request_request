@@ -20,6 +20,7 @@ ohos_unittest("preload_napi_test") {
     "include",
     "../preload/include",
     "../../common/mock_server/include",
+    "../../common/set_permission/include",
     "../../../../common/include",
     "../../../../frameworks/js/napi/preload_napi/include",
     "../../../../interfaces/inner_kits/cache_download/napi/include",

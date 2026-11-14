@@ -36,9 +36,8 @@
 #include "request_running_task_count.h"
 #include "request_service_proxy.h"
 #include "system_ability_definition.h"
-
-#include "want_agent_helper.h"
 #include "want_agent.h"
+#include "want_agent_helper.h"
 
 using namespace testing::ext;
 using namespace OHOS::Request;
@@ -1021,4 +1020,270 @@ HWTEST_F(RequestManagerImplTest, CreateWithNotificationTest002, TestSize.Level1)
         .WillOnce(testing::Return(E_CHANNEL_NOT_OPEN));
     EXPECT_EQ(RequestManagerImpl::GetInstance()->Create(config, seq, tid), E_OK);
     EXPECT_EQ(RequestManagerImpl::GetInstance()->Create(config, seq, tid), E_CHANNEL_NOT_OPEN);
+}
+
+class RMITestResponseListener : public IResponseListener {
+public:
+    void OnResponseReceive(const std::shared_ptr<Response> &response) override
+    {
+        responseCount_++;
+    }
+    int responseCount_ = 0;
+};
+
+class RMITestNotifyListener : public INotifyDataListener {
+public:
+    void OnNotifyDataReceive(const std::shared_ptr<NotifyData> &notifyData) override
+    {
+        notifyCount_++;
+    }
+    void OnFaultsReceive(const std::shared_ptr<int32_t> &tid, const std::shared_ptr<SubscribeType> &type,
+        const std::shared_ptr<Reason> &reason) override
+    {
+        faultsCount_++;
+    }
+    void OnWaitReceive(std::int32_t taskId, WaitingReason reason) override
+    {
+        waitCount_++;
+    }
+    int notifyCount_ = 0;
+    int faultsCount_ = 0;
+    int waitCount_ = 0;
+};
+
+/**
+ * @tc.name: CreateTasksEmptyTest001
+ * @tc.desc: CreateTasks returns E_OK immediately for an empty config list without
+ *           touching the proxy or the output vector
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare an empty configs vector and an empty rets vector
+ *           2. Call CreateTasks with the empty list
+ * @tc.expect: Returns E_OK and rets stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, CreateTasksEmptyTest001, TestSize.Level1)
+{
+    std::vector<Config> configs;
+    std::vector<TaskRet> outRets;
+    configs.reserve(1);
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->CreateTasks(configs, outRets), ExceptionErrorCode::E_OK);
+    EXPECT_TRUE(outRets.empty());
+    EXPECT_EQ(outRets.size(), 0u);
+}
+
+/**
+ * @tc.name: CreateTasksChannelReopenTest001
+ * @tc.desc: CreateTasks drives the E_CHANNEL_NOT_OPEN recovery loop: the first
+ *           failed task triggers ReopenChannel, every failed task triggers
+ *           Subscribe, and the subscribe result is written to a per-task copy
+ * @tc.precon: NA
+ * @tc.step: 1. Mock CreateTasks to return three TaskRets: two channel errors and one OK
+ *           2. Mock OpenChannel and Subscribe to return E_OK
+ *           3. Call CreateTasks and inspect the return value and rets
+ * @tc.expect: Returns E_OK, rets round-trips intact with original codes, Subscribe runs twice
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, CreateTasksChannelReopenTest001, TestSize.Level1)
+{
+    std::vector<Config> configs;
+    configs.push_back(Config());
+    std::vector<TaskRet> rets;
+    rets.push_back(TaskRet{ ExceptionErrorCode::E_CHANNEL_NOT_OPEN, "t1" });
+    rets.push_back(TaskRet{ ExceptionErrorCode::E_CHANNEL_NOT_OPEN, "t2" });
+    rets.push_back(TaskRet{ ExceptionErrorCode::E_OK, "t3" });
+    EXPECT_CALL(*exceptProxy, OpenChannel(testing::_)).WillOnce(testing::Return(E_OK));
+    EXPECT_CALL(*exceptProxy, CreateTasks(testing::_, testing::_))
+        .WillOnce(testing::DoAll(testing::SetArgReferee<1>(rets), testing::Return(ExceptionErrorCode::E_OK)));
+    EXPECT_CALL(*exceptProxy, Subscribe(testing::_)).Times(2).WillRepeatedly(testing::Return(E_OK));
+    std::vector<TaskRet> outRets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->CreateTasks(configs, outRets), ExceptionErrorCode::E_OK);
+    ASSERT_EQ(outRets.size(), 3u);
+    EXPECT_EQ(outRets[0].tid, "t1");
+    EXPECT_EQ(outRets[0].code, ExceptionErrorCode::E_CHANNEL_NOT_OPEN);
+    EXPECT_EQ(outRets[1].tid, "t2");
+    EXPECT_EQ(outRets[2].tid, "t3");
+    EXPECT_EQ(outRets[2].code, ExceptionErrorCode::E_OK);
+}
+
+/**
+ * @tc.name: CreateTasksFailTest001
+ * @tc.desc: CreateTasks forwards a non-E_OK proxy failure code to the caller and
+ *           leaves the output vector untouched; E_SERVICE_ERROR is reserved by
+ *           CallProxyMethod as the remote-died retry code, so E_PERMISSION is used
+ * @tc.precon: NA
+ * @tc.step: 1. Mock CreateTasks to return E_PERMISSION
+ *           2. Call CreateTasks with one config
+ * @tc.expect: Returns E_PERMISSION and rets stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, CreateTasksFailTest001, TestSize.Level1)
+{
+    std::vector<Config> configs;
+    configs.push_back(Config());
+    EXPECT_CALL(*exceptProxy, OpenChannel(testing::_)).WillOnce(testing::Return(E_OK));
+    EXPECT_CALL(*exceptProxy, CreateTasks(testing::_, testing::_))
+        .WillOnce(testing::Return(ExceptionErrorCode::E_PERMISSION));
+    std::vector<TaskRet> outRets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->CreateTasks(configs, outRets), ExceptionErrorCode::E_PERMISSION);
+    EXPECT_TRUE(outRets.empty());
+    EXPECT_EQ(outRets.size(), 0u);
+}
+
+/**
+ * @tc.name: CreateFileCloseTest001
+ * @tc.desc: Create closes the fd of user files after a successful create, skips
+ *           non-user files and keeps fds <= 0 untouched
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a config with one user file holding a live socketpair fd,
+ *              one non-user file and one user file with fd -1
+ *           2. Mock Create to return E_OK and call Create with API10
+ *           3. Probe the socketpair fd after the call
+ * @tc.expect: Returns E_OK; the live fd was closed so writes fail, other fds ignored
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, CreateFileCloseTest001, TestSize.Level1)
+{
+    int fds[2];
+    ASSERT_GE(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+    FileSpec userFile;
+    userFile.isUserFile = true;
+    userFile.fd = fds[0];
+    FileSpec notUserFile;
+    notUserFile.isUserFile = false;
+    notUserFile.fd = 99;
+    FileSpec invalidFdFile;
+    invalidFdFile.isUserFile = true;
+    invalidFdFile.fd = -1;
+    Config config;
+    config.version = Version::API10;
+    config.files.push_back(userFile);
+    config.files.push_back(notUserFile);
+    config.files.push_back(invalidFdFile);
+    int32_t seq = 1;
+    std::string tid;
+    EXPECT_CALL(*exceptProxy, Create(testing::_, testing::_)).WillOnce(testing::Return(E_OK));
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->Create(config, seq, tid), E_OK);
+    char probe = 0;
+    EXPECT_EQ(write(fds[0], &probe, 1), -1);
+    EXPECT_EQ(close(fds[1]), 0);
+}
+
+/**
+ * @tc.name: AddRemoveListenerAllTest001
+ * @tc.desc: AddListener and RemoveListener find or create the task and succeed
+ *           for both the response and notify-data listener overloads
+ * @tc.precon: NA
+ * @tc.step: 1. Add a response listener and a notify listener on the same task id
+ *           2. Verify the task exists and has listeners
+ *           3. Remove both listeners and verify no listener remains
+ * @tc.expect: All four calls return E_OK; the task has no listener after removal
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, AddRemoveListenerAllTest001, TestSize.Level1)
+{
+    string tid = "arl";
+    auto respListener = std::make_shared<RMITestResponseListener>();
+    auto notifyListener = std::make_shared<RMITestNotifyListener>();
+    auto mgr = RequestManagerImpl::GetInstance();
+    EXPECT_EQ(mgr->AddListener(tid, SubscribeType::RESPONSE, respListener), E_OK);
+    EXPECT_EQ(mgr->AddListener(tid, SubscribeType::COMPLETED, notifyListener), E_OK);
+    EXPECT_NE(mgr->GetTask(tid).get(), nullptr);
+    EXPECT_EQ(mgr->GetTask(tid)->HasListener(), true);
+    EXPECT_EQ(mgr->RemoveListener(tid, SubscribeType::RESPONSE, respListener), E_OK);
+    EXPECT_EQ(mgr->RemoveListener(tid, SubscribeType::COMPLETED, notifyListener), E_OK);
+    EXPECT_EQ(mgr->GetTask(tid)->HasListener(), false);
+}
+
+/**
+ * @tc.name: OnFaultsWaitReceiveForwardTest001
+ * @tc.desc: OnFaultsReceive and OnWaitReceive forward to the listener registered
+ *           on the matching task, and skip unknown subscribe types silently
+ * @tc.precon: NA
+ * @tc.step: 1. Register a notify listener under COMPLETED and WAIT on task "5"
+ *           2. Call OnFaultsReceive with the COMPLETED type
+ *           3. Call OnFaultsReceive with an unregistered type
+ *           4. Call OnWaitReceive after registering the WAIT listener
+ * @tc.expect: The registered callbacks fire exactly once each; the unknown type does not fire
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, OnFaultsWaitReceiveForwardTest001, TestSize.Level1)
+{
+    string tid = "5";
+    auto notifyListener = std::make_shared<RMITestNotifyListener>();
+    auto mgr = RequestManagerImpl::GetInstance();
+    EXPECT_EQ(mgr->AddListener(tid, SubscribeType::COMPLETED, notifyListener), E_OK);
+    EXPECT_EQ(mgr->AddListener(tid, SubscribeType::WAIT, notifyListener), E_OK);
+    auto tidPtr = std::make_shared<int32_t>(5);
+    auto typePtr = std::make_shared<SubscribeType>(SubscribeType::COMPLETED);
+    auto reasonPtr = std::make_shared<Reason>();
+    mgr->OnFaultsReceive(tidPtr, typePtr, reasonPtr);
+    EXPECT_EQ(notifyListener->faultsCount_, 1);
+    auto otherType = std::make_shared<SubscribeType>(SubscribeType::REMOVE);
+    mgr->OnFaultsReceive(tidPtr, otherType, reasonPtr);
+    EXPECT_EQ(notifyListener->faultsCount_, 1);
+    mgr->OnWaitReceive(5, WaitingReason::TaskQueueFull);
+    EXPECT_EQ(notifyListener->waitCount_, 1);
+    EXPECT_EQ(notifyListener->notifyCount_, 0);
+}
+
+/**
+ * @tc.name: OnRemoveReceiverShutdownTest001
+ * @tc.desc: OnRemoveSystemAbility resets the proxy, run count and SA status, and
+ *           shutting the receiver down cascades OnChannelBroken which releases it
+ * @tc.precon: NA
+ * @tc.step: 1. Attach a message receiver with fd -1 to the manager
+ *           2. Dispatch OnRemoveSystemAbility with DOWNLOAD_SERVICE_ID
+ * @tc.expect: Proxy is null, count is zero, SA offline, the receiver is reset to null
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, OnRemoveReceiverShutdownTest001, TestSize.Level1)
+{
+    auto mgr = RequestManagerImpl::GetInstance();
+    mgr->msgReceiver_ = std::make_shared<ResponseMessageReceiver>(mgr, -1);
+    RequestManagerImpl::SystemAbilityStatusChangeListener listener;
+    listener.OnRemoveSystemAbility(OHOS::DOWNLOAD_SERVICE_ID, "deviceId");
+    EXPECT_EQ(mgr->requestServiceProxy_, nullptr);
+    EXPECT_EQ(FwkRunningTaskCountManager::GetInstance()->GetCount(), 0);
+    EXPECT_FALSE(FwkRunningTaskCountManager::GetInstance()->SaIsOnline());
+    EXPECT_EQ(mgr->msgReceiver_, nullptr);
+}
+
+/**
+ * @tc.name: SubscribeUnsubscribeSATest001
+ * @tc.desc: SubscribeSA early-returns true when a listener is already registered
+ *           and UnsubscribeSA early-returns true when none is, both without any
+ *           samgr interaction
+ * @tc.precon: NA
+ * @tc.step: 1. Register a fresh listener object and call SubscribeSA
+ *           2. Verify the early-return keeps the listener pointer set
+ *           3. Clear the listener pointer and call UnsubscribeSA
+ * @tc.expect: Both calls return true without touching samgr; the pointer state is preserved
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, SubscribeUnsubscribeSATest001, TestSize.Level1)
+{
+    auto mgr = RequestManagerImpl::GetInstance();
+    mgr->saChangeListener_ = new (std::nothrow) RequestManagerImpl::SystemAbilityStatusChangeListener();
+    EXPECT_NE(mgr->saChangeListener_, nullptr);
+    EXPECT_TRUE(mgr->SubscribeSA());
+    EXPECT_NE(mgr->saChangeListener_, nullptr);
+    mgr->saChangeListener_ = nullptr;
+    EXPECT_TRUE(mgr->UnsubscribeSA());
+    EXPECT_EQ(mgr->saChangeListener_, nullptr);
 }

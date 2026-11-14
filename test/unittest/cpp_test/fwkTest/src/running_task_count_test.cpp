@@ -232,3 +232,53 @@ HWTEST_F(RunningTaskCountTest, NotifyAllObserversTest001, TestSize.Level1)
     FwkRunningTaskCountManager::GetInstance()->NotifyAllObservers();
     FwkRunningTaskCountManager::GetInstance()->DetachObserver(ob1);
 }
+
+/**
+ * @tc.name: ManagerGetInstanceTwiceTest001
+ * @tc.desc: FwkRunningTaskCountManager::GetInstance always hands out the same
+ *           singleton instance and reads and writes go through it
+ * @tc.precon: NA
+ * @tc.step: 1. Fetch the instance twice by reference
+ *           2. Compare the underlying pointers
+ *           3. Set a count on the first handle and read it back via the second
+ * @tc.expect: Both handles point to the same object and the count round-trips
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RunningTaskCountTest, ManagerGetInstanceTwiceTest001, TestSize.Level1)
+{
+    std::unique_ptr<FwkRunningTaskCountManager> &first = FwkRunningTaskCountManager::GetInstance();
+    std::unique_ptr<FwkRunningTaskCountManager> &second = FwkRunningTaskCountManager::GetInstance();
+    EXPECT_NE(first.get(), nullptr);
+    EXPECT_NE(second.get(), nullptr);
+    EXPECT_EQ(first.get(), second.get());
+    int count = first->GetCount();
+    first->SetCount(count);
+    EXPECT_EQ(second->GetCount(), count);
+}
+
+/**
+ * @tc.name: DetachNotFoundTest001
+ * @tc.desc: DetachObserver on an observer that was never attached leaves the
+ *           observer list unchanged and does not crash
+ * @tc.precon: NA
+ * @tc.step: 1. Record the current HasObserver state
+ *           2. Detach two fresh observers that were never attached
+ *           3. Re-check HasObserver after each detach
+ * @tc.expect: HasObserver is identical before and after both detaches
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RunningTaskCountTest, DetachNotFoundTest001, TestSize.Level1)
+{
+    auto &mgr = FwkRunningTaskCountManager::GetInstance();
+    bool hadObserver = mgr->HasObserver();
+    std::shared_ptr<IRunningTaskObserver> ob = std::make_shared<FwkTestOberver>();
+    mgr->DetachObserver(ob);
+    EXPECT_EQ(mgr->HasObserver(), hadObserver);
+    std::shared_ptr<IRunningTaskObserver> ob2 = std::make_shared<FwkTestOberver>();
+    mgr->DetachObserver(ob2);
+    EXPECT_EQ(mgr->HasObserver(), hadObserver);
+}

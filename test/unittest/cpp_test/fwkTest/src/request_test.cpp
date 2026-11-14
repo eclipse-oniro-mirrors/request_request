@@ -341,3 +341,66 @@ HWTEST_F(RequestTest, AddListenerTest002, TestSize.Level1)
     request.AddListener(SubscribeType::HEADER_RECEIVE, listenerPtr);
     EXPECT_EQ(g_requestTest, 1);
 }
+
+class RTNotifyDataListenerImpl2 : public INotifyDataListener {
+public:
+    ~RTNotifyDataListenerImpl2(){};
+    void OnNotifyDataReceive(const std::shared_ptr<NotifyData> &notifyData) override
+    {
+        (void)notifyData;
+        notifyCount_++;
+    }
+    void OnFaultsReceive(const std::shared_ptr<int32_t> &tid, const std::shared_ptr<SubscribeType> &type,
+        const std::shared_ptr<Reason> &reason) override
+    {
+        (void)tid;
+        (void)type;
+        (void)reason;
+        faultsCount_++;
+    }
+    void OnWaitReceive(std::int32_t taskId, WaitingReason reason) override
+    {
+        (void)taskId;
+        (void)reason;
+        waitCount_++;
+    }
+    int notifyCount_ = 0;
+    int faultsCount_ = 0;
+    int waitCount_ = 0;
+};
+
+/**
+ * @tc.name: OnFaultsWaitReceiveTest001
+ * @tc.desc: OnFaultsReceive and OnWaitReceive dispatch only when a listener is
+ *           registered under the matching subscribe type and stay silent otherwise
+ * @tc.precon: NA
+ * @tc.step: 1. Create a Request and deliver faults with no listener attached
+ *           2. Register a COMPLETED listener and deliver faults for COMPLETED and REMOVE
+ *           3. Deliver a wait event before and after registering a WAIT listener
+ * @tc.expect: Callbacks fire exactly once for the registered type and never for unregistered types
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestTest, OnFaultsWaitReceiveTest001, TestSize.Level1)
+{
+    Request request = Request("fwTid");
+    auto listener = std::make_shared<RTNotifyDataListenerImpl2>();
+    auto tidPtr = std::make_shared<int32_t>(1);
+    auto typePtr = std::make_shared<SubscribeType>(SubscribeType::COMPLETED);
+    auto reasonPtr = std::make_shared<Reason>();
+    request.OnFaultsReceive(tidPtr, typePtr, reasonPtr);
+    EXPECT_EQ(listener->faultsCount_, 0);
+    request.AddListener(SubscribeType::COMPLETED, listener);
+    request.OnFaultsReceive(tidPtr, typePtr, reasonPtr);
+    EXPECT_EQ(listener->faultsCount_, 1);
+    auto removeType = std::make_shared<SubscribeType>(SubscribeType::REMOVE);
+    request.OnFaultsReceive(tidPtr, removeType, reasonPtr);
+    EXPECT_EQ(listener->faultsCount_, 1);
+    request.OnWaitReceive(1, WaitingReason::TaskQueueFull);
+    EXPECT_EQ(listener->waitCount_, 0);
+    request.AddListener(SubscribeType::WAIT, listener);
+    request.OnWaitReceive(1, WaitingReason::TaskQueueFull);
+    EXPECT_EQ(listener->waitCount_, 1);
+    EXPECT_EQ(listener->notifyCount_, 0);
+}
