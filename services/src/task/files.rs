@@ -612,10 +612,13 @@ mod tests {
     }
 
     // @tc.name: trailing_symlink_is_rejected
-    // @tc.desc: Test that a trailing symlink is rejected by O_NOFOLLOW
+    // @tc.desc: Test that a trailing symlink is rejected (O_NOFOLLOW at open, or
+    // verify_within_base as a post-open fallback on kernels where O_NOFOLLOW is
+    // not enforced for a trailing symlink).
     // @tc.precon: NA
     // @tc.step: 1. Plant a symlink file under base 2. Open it
-    // @tc.expect: Open fails with ELOOP
+    // @tc.expect: Open fails — either ELOOP (O_NOFOLLOW) or PermissionDenied
+    // (verify_within_base), both reject the escaped symlink.
     // @tc.type: FUNC
     #[test]
     fn trailing_symlink_is_rejected() {

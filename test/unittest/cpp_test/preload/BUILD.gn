@@ -15,6 +15,7 @@ import("//build/test.gni")
 
 ohos_unittest("preload_test") {
   module_out_path = "request/request/request"
+  resource_config_file = "ohos_test.xml"
 
   include_dirs = [
     "include",
@@ -38,6 +39,7 @@ ohos_unittest("preload_test") {
     "../../../../frameworks/native/cache_download:preload_native",
     "../../../../common/utf8_utils:request_utf8_utils",
     "../../common/set_permission:common_permission",
+    "../../common/mock_server:mock_server",
   ]
   external_deps = [
     "c_utils:utils",
@@ -51,8 +53,5 @@ ohos_unittest("preload_test") {
 
 group("unittest") {
   testonly = true
-  deps = []
-  if (device_name != "rk3568") {
-    deps = [ ":preload_test" ]
-  }
+  deps = [ ":preload_test" ]
 }

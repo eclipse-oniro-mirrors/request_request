@@ -17,6 +17,11 @@ import { describe, beforeAll, beforeEach, afterEach, afterAll, it, expect } from
 import cacheDownload from '@ohos.request.cacheDownload';
 import Server from '../common/iTcpServer'
 
+// Per-case upper bound for waiting on a download callback, and the
+// getDownloadInfo poll interval used while waiting, in milliseconds.
+const DOWNLOAD_TIMEOUT_MS = 15000;
+const POLL_INTERVAL_MS = 3000;
+
 export default function cacheDownloadInfo() {
   describe('cacheDownloadInfo', () => {
     let server: Server | null = null;
@@ -52,6 +57,21 @@ export default function cacheDownloadInfo() {
         setTimeout(resolve, ms);
       });
     };
+
+    // Poll getDownloadInfo (public API) until the download for url finishes
+    // (its info appears in the list) or timeoutMs elapses as a fallback.
+    // Prerequisite: setDownloadInfoListSize(>0) has been called, otherwise no
+    // info is ever stored and this falls back to timeoutMs.
+    let waitForDownloadFinish: (url: string, timeoutMs: number) => Promise<void> =
+      async (url: string, timeoutMs: number): Promise<void> => {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+          if (cacheDownload.getDownloadInfo(url) !== undefined) {
+            return;
+          }
+          await sleep(50);
+        }
+      };
 
     let cbSuccess1 = () => {
       console.info("cbSuccess1");
@@ -160,7 +180,7 @@ export default function cacheDownloadInfo() {
      *           3. Get download info twice via getDownloadInfo and verify totalTime is different.
      * @tc.require: issues#1573
      */
-    it('testGetDownloadInfo001', 15000, async (done: Function) => {
+    it('testGetDownloadInfo001', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {};
         cacheDownload.setDownloadInfoListSize(1);
@@ -195,7 +215,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testGetDownloadInfo002
@@ -214,7 +234,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify the first URL's info is cleared and the second URL's info exists.
      * @tc.require: issues#1573
      */
-    it('testGetDownloadInfo002', 15000, async (done: Function) => {
+    it('testGetDownloadInfo002', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {};
         cacheDownload.setDownloadInfoListSize(1);
@@ -252,7 +272,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
     
     /**
      * @tc.number: testGetDownloadInfo003
@@ -271,7 +291,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify the oldest URL's info is cleared and the latest two exist.
      * @tc.require: issues#1573
      */
-    it('testGetDownloadInfo003', 15000, async (done: Function) => {
+    it('testGetDownloadInfo003', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {};
         cacheDownload.setDownloadInfoListSize(2);
@@ -319,7 +339,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testGetDownloadInfo004
@@ -351,7 +371,7 @@ export default function cacheDownloadInfo() {
      *              if not, print error and assert failure.
      * @tc.require: issues#1573
      */
-    it('testGetDownloadInfo004', 15000, async (done: Function) => {
+    it('testGetDownloadInfo004', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {};
         cacheDownload.setDownloadInfoListSize(2);
@@ -406,7 +426,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testGetDownloadInfo005
@@ -433,7 +453,7 @@ export default function cacheDownloadInfo() {
      *              then execute done().
      * @tc.require: issues#1573
      */
-    it('testGetDownloadInfo005', 15000, async (done: Function) => {
+    it('testGetDownloadInfo005', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {
           headers: {
@@ -473,7 +493,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testGetDownloadInfo006
@@ -539,7 +559,7 @@ export default function cacheDownloadInfo() {
      *           6. Compare the obtained download information.
      * @tc.require: issues#1650
      */
-    it('testCacheStrategy001', 15000, async (done: Function) => {
+    it('testCacheStrategy001', 0, async (done: Function) => {
       try {
         let forceOptions: cacheDownload.CacheDownloadOptions = {
             cacheStrategy : cacheDownload.CacheStrategy.FORCE
@@ -599,7 +619,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testCacheStrategy002
@@ -620,7 +640,7 @@ export default function cacheDownloadInfo() {
      *               http://127.0.0.1:8078/test400K.txt download information again.
      * @tc.require: issues#1650
      */
-    it('testCacheStrategy002', 15000, async (done: Function) => {
+    it('testCacheStrategy002', 0, async (done: Function) => {
       try {
         let lazyOptions: cacheDownload.CacheDownloadOptions = {
             cacheStrategy : cacheDownload.CacheStrategy.LAZY
@@ -644,7 +664,7 @@ export default function cacheDownloadInfo() {
          expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testCacheStrategy003
@@ -672,7 +692,7 @@ export default function cacheDownloadInfo() {
      *           6. Compare the obtained download information.
      * @tc.require: issues#1650
      */
-    it('testCacheStrategy003', 15000, async (done: Function) => {
+    it('testCacheStrategy003', 0, async (done: Function) => {
       try {
         let forceOptions: cacheDownload.CacheDownloadOptions = {
             cacheStrategy : cacheDownload.CacheStrategy.FORCE
@@ -709,7 +729,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testCacheStrategy004
@@ -730,7 +750,7 @@ export default function cacheDownloadInfo() {
      *              http://127.0.0.1:8078/test400K.txt download information again.
      * @tc.require: issues#1650
      */
-    it('testCacheStrategy004', 15000, async (done: Function) => {
+    it('testCacheStrategy004', 0, async (done: Function) => {
       try {
         let forceOptions: cacheDownload.CacheDownloadOptions = {
             cacheStrategy : cacheDownload.CacheStrategy.FORCE
@@ -752,7 +772,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testCacheStrategy005
@@ -806,7 +826,7 @@ export default function cacheDownloadInfo() {
      *           6. Compare the obtained download information.
      * @tc.require: issues#1650
      */
-    it('testCacheStrategy006', 15000, async (done: Function) => {
+    it('testCacheStrategy006', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {};
         cacheDownload.setDownloadInfoListSize(1);
@@ -841,7 +861,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testCacheStrategy007
@@ -869,7 +889,7 @@ export default function cacheDownloadInfo() {
      *           6. Compare the obtained download information.
      * @tc.require: issues#1650
      */
-    it('testCacheStrategy007', 15000, async (done: Function) => {
+    it('testCacheStrategy007', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {
             cacheStrategy : undefined
@@ -906,7 +926,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testCacheStrategy008
@@ -934,7 +954,7 @@ export default function cacheDownloadInfo() {
      *           6. Compare the obtained download information.
      * @tc.require: issues#1650
      */
-    it('testCacheStrategy008', 15000, async (done: Function) => {
+    it('testCacheStrategy008', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {
             cacheStrategy : "test"
@@ -971,7 +991,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testCacheStrategy009
@@ -999,7 +1019,7 @@ export default function cacheDownloadInfo() {
      *           6. Compare the obtained download information.
      * @tc.require: issues#1650
      */
-    it('testCacheStrategy009', 15000, async (done: Function) => {
+    it('testCacheStrategy009', 0, async (done: Function) => {
       try {
         let options: cacheDownload.CacheDownloadOptions = {
             cacheStrategy : 3
@@ -1036,7 +1056,7 @@ export default function cacheDownloadInfo() {
         expect(false).assertTrue();
         done();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
     /**
      * @tc.number: testDownloadSuccess001
      * @tc.name: testDownloadSuccess001
@@ -1053,7 +1073,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify the success callback is triggered within timeout
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess001', 15000, async () => {
+    it('testDownloadSuccess001', 0, async () => {
       const url = baseUrl + "/test.txt";
 
       // 创建Promise包装回调，显式指定类型
@@ -1083,7 +1103,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess001 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
     /**
      * @tc.number: testDownloadSuccess002
      * @tc.name: testDownloadSuccess002
@@ -1100,7 +1120,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify the success callback is triggered for both downloads
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess002', 15000, async () => {
+    it('testDownloadSuccess002', 0, async () => {
       const url = baseUrl + "/test.txt";
       let callbackCount = 0;
       
@@ -1130,7 +1150,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess002 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess003
@@ -1148,7 +1168,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify both callbacks are triggered correctly
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess003', 15000, async () => {
+    it('testDownloadSuccess003', 0, async () => {
       const url = baseUrl + "/test.txt";
       
       // 创建Promise包装嵌套回调
@@ -1174,7 +1194,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess003 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess004
@@ -1193,37 +1213,32 @@ export default function cacheDownloadInfo() {
      *           4. Verify the callback is not triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess004', 15000, async () => {
+    it('testDownloadSuccess004', 0, async () => {
       const url = baseUrl + "/test.txt";
       let callbackCalled = false;
-      
-      // 创建Promise包装回调
-      const successPromise = new Promise<void>((resolve) => {
-        cacheDownload.onDownloadSuccess(url, () => {
-          callbackCalled = true;
-          resolve();
-        });
+
+      cacheDownload.onDownloadSuccess(url, () => {
+        callbackCalled = true;
       });
 
-      const timeoutPromise = new Promise<void>((resolve) => 
-        setTimeout(() => resolve(), 5000)
-      );
-
       try {
-        // 注册后立即取消
+        // Register then immediately unregister the callback under test.
         cacheDownload.offDownloadSuccess(url);
+        // Enable info recording so getDownloadInfo can signal completion.
+        cacheDownload.setDownloadInfoListSize(10);
         cacheDownload.download(url, {});
-        
-        // 等待5秒看回调是否被调用
-        await Promise.race([successPromise, timeoutPromise]);
-        
-        // 验证回调未被调用
+
+        // Wait for download completion via public API (poll getDownloadInfo),
+        // falling back to 3000ms if info is not stored.
+        await waitForDownloadFinish(url, POLL_INTERVAL_MS);
+        // Brief buffer to confirm the unregistered callback does not fire.
+        await sleep(500);
         expect(callbackCalled).assertFalse();
       } catch (err) {
         console.error('testDownloadSuccess004 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess005
@@ -1242,33 +1257,28 @@ export default function cacheDownloadInfo() {
      *           4. Verify the callback is not triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess005', 15000, async () => {
+    it('testDownloadSuccess005', 0, async () => {
       const url = baseUrl + "/test.txt";
       let callbackCalled = false;
-      
-      const successPromise = new Promise<void>((resolve) => {
-        cacheDownload.onDownloadSuccess(url, () => {
-          callbackCalled = true;
-          resolve();
-        });
+
+      cacheDownload.onDownloadSuccess(url, () => {
+        callbackCalled = true;
       });
 
-      const timeoutPromise = new Promise<void>((resolve) => 
-        setTimeout(() => resolve(), 5000)
-      );
-
       try {
-        // 注册多个回调后全部取消
+        // Register multiple callbacks then unregister all of them.
         cacheDownload.offDownloadSuccess(url);
+        cacheDownload.setDownloadInfoListSize(10);
         cacheDownload.download(url, {});
-        
-        await Promise.race([successPromise, timeoutPromise]);
+
+        await waitForDownloadFinish(url, POLL_INTERVAL_MS);
+        await sleep(500);
         expect(callbackCalled).assertFalse();
       } catch (err) {
         console.error('testDownloadSuccess005 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess006
@@ -1286,7 +1296,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify all callbacks are triggered in registration order
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess006', 15000, async () => {
+    it('testDownloadSuccess006', 0, async () => {
       const url = baseUrl + "/test.txt";
       let cbString = "";
       
@@ -1322,7 +1332,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess006 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess007
@@ -1340,7 +1350,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify only the last registered callback is triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess007', 15000, async () => {
+    it('testDownloadSuccess007', 0, async () => {
       const url = baseUrl + "/test.txt";
       let cbString = "";
       
@@ -1368,7 +1378,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess007 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess008
@@ -1387,7 +1397,7 @@ export default function cacheDownloadInfo() {
      *           4. Verify only the remaining callback is triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess008', 15000, async () => {
+    it('testDownloadSuccess008', 0, async () => {
       const url = baseUrl + "/test.txt";
       let cbString = "";
       
@@ -1419,7 +1429,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess008 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess009
@@ -1438,35 +1448,30 @@ export default function cacheDownloadInfo() {
      *           4. Verify the callback is not triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess009', 15000, async () => {
+    it('testDownloadSuccess009', 0, async () => {
       const url = baseUrl + "/test.txt";
       let cbString = "";
-      
-      const successPromise = new Promise<void>((resolve) => {
-        // 设置超时检查
-        setTimeout(() => {
-          resolve();
-        }, 5000);
-      });
 
       try {
         const callback = () => { cbString += "a"; };
-        
-        // 注册多个相同回调
+
+        // Register the same callback multiple times.
         cacheDownload.onDownloadSuccess(url, callback);
         cacheDownload.onDownloadSuccess(url, callback);
-        
-        // 取消所有该回调
+
+        // Unregister that callback only.
         cacheDownload.offDownloadSuccess(url, callback);
-        
+
+        cacheDownload.setDownloadInfoListSize(10);
         cacheDownload.download(url, {});
-        await successPromise;
+        await waitForDownloadFinish(url, POLL_INTERVAL_MS);
+        await sleep(500);
         expect(cbString).assertEqual("");
       } catch (err) {
         console.error('testDownloadSuccess009 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess010
@@ -1485,29 +1490,27 @@ export default function cacheDownloadInfo() {
      *           4. Verify no callbacks are triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess010', 15000, async () => {
+    it('testDownloadSuccess010', 0, async () => {
       const url = baseUrl + "/test.txt";
       let cbString = "";
-      
-      const successPromise = new Promise<void>((resolve) => {
-        setTimeout(() => resolve(), 5000);
-      });
 
       try {
         cacheDownload.onDownloadSuccess(url, () => { cbString += "a"; });
         cacheDownload.onDownloadSuccess(url, () => { cbString += "a"; });
-        
-        // 取消所有回调
+
+        // Unregister all callbacks.
         cacheDownload.offDownloadSuccess(url);
-        
+
+        cacheDownload.setDownloadInfoListSize(10);
         cacheDownload.download(url, {});
-        await successPromise;
+        await waitForDownloadFinish(url, POLL_INTERVAL_MS);
+        await sleep(500);
         expect(cbString).assertEqual("");
       } catch (err) {
         console.error('testDownloadSuccess010 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess011
@@ -1526,7 +1529,7 @@ export default function cacheDownloadInfo() {
      *           4. Verify only the first callback is triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess011', 15000, async () => {
+    it('testDownloadSuccess011', 0, async () => {
       const url = baseUrl + "/test.txt";
       let cbString = "";
       
@@ -1559,7 +1562,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess011 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess012
@@ -1578,7 +1581,7 @@ export default function cacheDownloadInfo() {
      *           4. Verify callback behavior across both downloads
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess012', 15000, async () => {
+    it('testDownloadSuccess012', 0, async () => {
       const url = baseUrl + "/bird.png";
       let cbString = "";
       let downloadCounter = 0;
@@ -1632,7 +1635,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess012 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadSuccess013
@@ -1650,7 +1653,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify the self-unregistering callback only triggers once
      * @tc.require: issues#1650
      */
-    it('testDownloadSuccess013', 15000, async () => {
+    it('testDownloadSuccess013', 0, async () => {
       const url = baseUrl + "/test.txt";
       let cbString = "";
       let downloadCounter = 0;
@@ -1702,7 +1705,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadSuccess013 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError001
@@ -1720,7 +1723,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify error callback is triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadError001', 15000, async () => {
+    it('testDownloadError001', 0, async () => {
       const url = baseUrl + "/test123.txt";
       
       const errorPromise = new Promise<void>((resolve) => {
@@ -1741,7 +1744,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError001 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError002
@@ -1759,7 +1762,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify error callback is triggered twice
      * @tc.require: issues#1650
      */
-    it('testDownloadError002', 15000, async () => {
+    it('testDownloadError002', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let errorCount = 0;
       
@@ -1783,7 +1786,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError002 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError003
@@ -1802,7 +1805,7 @@ export default function cacheDownloadInfo() {
      *           4. Verify both callbacks are triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadError003', 15000, async () => {
+    it('testDownloadError003', 0, async () => {
       const url = baseUrl + "/test123.txt";
       
       const errorPromise = new Promise<void>((resolve) => {
@@ -1827,7 +1830,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError003 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError004
@@ -1846,33 +1849,30 @@ export default function cacheDownloadInfo() {
      *           4. Verify callback is not triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadError004', 15000, async () => {
+    it('testDownloadError004', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let callbackCalled = false;
-      
-      const errorPromise = new Promise<void>((resolve) => {
-        cacheDownload.onDownloadError(url, () => {
-          callbackCalled = true;
-          resolve();
-        });
+
+      cacheDownload.onDownloadError(url, () => {
+        callbackCalled = true;
       });
 
-      const timeoutPromise = new Promise<void>((resolve) => 
-        setTimeout(() => resolve(), 5000)
-      );
-
       try {
-        // 注册后立即取消
+        // Register then immediately unregister the callback under test.
         cacheDownload.offDownloadError(url);
+        cacheDownload.setDownloadInfoListSize(10);
         cacheDownload.download(url, {});
-        
-        await Promise.race([errorPromise, timeoutPromise]);
+
+        // Wait for download completion via public API (poll getDownloadInfo),
+        // falling back to 3000ms if info is not stored (e.g. error downloads).
+        await waitForDownloadFinish(url, POLL_INTERVAL_MS);
+        await sleep(500);
         expect(callbackCalled).assertFalse();
       } catch (err) {
         console.error('testDownloadError004 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError005
@@ -1891,33 +1891,28 @@ export default function cacheDownloadInfo() {
      *           4. Verify callback is not triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadError005', 15000, async () => {
+    it('testDownloadError005', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let callbackCalled = false;
-      
-      const errorPromise = new Promise<void>((resolve) => {
-        cacheDownload.onDownloadError(url, () => {
-          callbackCalled = true;
-          resolve();
-        });
+
+      cacheDownload.onDownloadError(url, () => {
+        callbackCalled = true;
       });
 
-      const timeoutPromise = new Promise<void>((resolve) => 
-        setTimeout(() => resolve(), 5000)
-      );
-
       try {
-        // 注册多个回调后全部取消
+        // Register multiple callbacks then unregister all of them.
         cacheDownload.offDownloadError(url);
+        cacheDownload.setDownloadInfoListSize(10);
         cacheDownload.download(url, {});
-        
-        await Promise.race([errorPromise, timeoutPromise]);
+
+        await waitForDownloadFinish(url, POLL_INTERVAL_MS);
+        await sleep(500);
         expect(callbackCalled).assertFalse();
       } catch (err) {
         console.error('testDownloadError005 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError006
@@ -1935,7 +1930,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify both callbacks are triggered in registration order
      * @tc.require: issues#1650
      */
-    it('testDownloadError006', 15000, async () => {
+    it('testDownloadError006', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let cbString = "";
       
@@ -1970,7 +1965,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError006 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError007
@@ -1989,7 +1984,7 @@ export default function cacheDownloadInfo() {
      *           4. Verify only the second callback is triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadError007', 15000, async () => {
+    it('testDownloadError007', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let cbString = "";
       
@@ -2021,7 +2016,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError007 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError008
@@ -2040,7 +2035,7 @@ export default function cacheDownloadInfo() {
      *           4. Verify only the second callback is triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadError008', 15000, async () => {
+    it('testDownloadError008', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let cbString = "";
       
@@ -2072,7 +2067,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError008 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError009
@@ -2091,32 +2086,30 @@ export default function cacheDownloadInfo() {
      *           4. Verify callback is not triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadError009', 15000, async () => {
+    it('testDownloadError009', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let cbString = "";
-      
-      const errorPromise = new Promise<void>((resolve) => {
-        setTimeout(() => resolve(), 5000);
-      });
 
       try {
         const callback = () => { cbString += "a"; };
-        
-        // 注册多个相同回调
+
+        // Register the same callback multiple times.
         cacheDownload.onDownloadError(url, callback);
         cacheDownload.onDownloadError(url, callback);
-        
-        // 取消所有该回调
+
+        // Unregister that callback only.
         cacheDownload.offDownloadError(url, callback);
-        
+
+        cacheDownload.setDownloadInfoListSize(10);
         cacheDownload.download(url, {});
-        await errorPromise;
+        await waitForDownloadFinish(url, POLL_INTERVAL_MS);
+        await sleep(500);
         expect(cbString).assertEqual("");
       } catch (err) {
         console.error('testDownloadError009 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError010
@@ -2135,29 +2128,27 @@ export default function cacheDownloadInfo() {
      *           4. Verify no callbacks are triggered
      * @tc.require: issues#1650
      */
-    it('testDownloadError010', 15000, async () => {
+    it('testDownloadError010', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let cbString = "";
-      
-      const errorPromise = new Promise<void>((resolve) => {
-        setTimeout(() => resolve(), 5000);
-      });
 
       try {
         cacheDownload.onDownloadError(url, () => { cbString += "a"; });
         cacheDownload.onDownloadError(url, () => { cbString += "a"; });
-        
-        // 取消所有回调
+
+        // Unregister all callbacks.
         cacheDownload.offDownloadError(url);
-        
+
+        cacheDownload.setDownloadInfoListSize(10);
         cacheDownload.download(url, {});
-        await errorPromise;
+        await waitForDownloadFinish(url, POLL_INTERVAL_MS);
+        await sleep(500);
         expect(cbString).assertEqual("");
       } catch (err) {
         console.error('testDownloadError010 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError011
@@ -2176,7 +2167,7 @@ export default function cacheDownloadInfo() {
      *           4. Verify only the first callback completes execution
      * @tc.require: issues#1650
      */
-    it('testDownloadError011', 15000, async () => {
+    it('testDownloadError011', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let cbString = "";
       
@@ -2209,7 +2200,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError011 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
 
     /**
      * @tc.number: testDownloadError012
@@ -2228,7 +2219,7 @@ export default function cacheDownloadInfo() {
      *           4. Verify callback behavior across both downloads
      * @tc.require: issues#1650
      */
-    it('testDownloadError012', 15000, async () => {
+    it('testDownloadError012', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let cbString = "";
       let downloadCounter = 0;
@@ -2288,7 +2279,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError012 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
     /**
      * @tc.number: testDownloadError013
      * @tc.name: testDownloadError013
@@ -2305,7 +2296,7 @@ export default function cacheDownloadInfo() {
      *           3. Verify the self-unregistering callback only triggers once
      * @tc.require: issues#1650
      */
-    it('testDownloadError013', 15000, async () => {
+    it('testDownloadError013', 0, async () => {
       const url = baseUrl + "/test123.txt";
       let cbString = "";
       let downloadCounter = 0;
@@ -2357,7 +2348,7 @@ export default function cacheDownloadInfo() {
         console.error('testDownloadError013 download error:', (err as Error).message);
         expect(false).assertTrue();
       }
-    });
+    }, DOWNLOAD_TIMEOUT_MS);
     /**
      * @tc.number: testCacheDownloadEnum001
      * @tc.name: testCacheDownloadEnum001

@@ -17,14 +17,24 @@ import { describe, beforeAll, beforeEach, afterEach, afterAll, it, expect } from
 import request from '@ohos.request';
 import fs from '@ohos.file.fs';
 import common from '@ohos.app.ability.common';
+import Server from '../common/iTcpServer'
 
 export default function RequestUploadFileTest() {
   describe('RequestUploadFileTest', () => {
-    beforeAll(() => {
+    let server: Server | null = null;
+    let baseUrl: string = "";
+    beforeAll(async () => {
       console.info('beforeAll called');
+      server = new Server();
+      let port = await server.serverStart();
+      baseUrl = `http://127.0.0.1:${port}`;
+      console.info("server started on " + baseUrl);
     });
-    afterAll(() => {
+    afterAll(async () => {
       console.info('afterAll called');
+      if (server != null) {
+        await server.serverForceClose();
+      }
     });
     beforeEach(() => {
       console.info('beforeEach called');
@@ -167,7 +177,7 @@ export default function RequestUploadFileTest() {
       let file = fs.openSync(cacheDir + '/test.txt', fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE);
       fs.closeSync(file);
       let conf: request.UploadConfig = {
-        url: 'https://gitee.com/openharmony/request_request',
+        url: baseUrl + '/upload',
         header: {
           'Accept': '*/*'
         },

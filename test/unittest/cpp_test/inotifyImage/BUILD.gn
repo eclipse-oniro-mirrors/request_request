@@ -18,6 +18,7 @@ ohos_unittest("inotify_image_test") {
 
   include_dirs = [
     "../preload/include",
+    "../../common/mock_server/include",
     "../../../../interfaces/inner_kits/predownload/include",
     "../../../../common/include",
   ]
@@ -31,6 +32,8 @@ ohos_unittest("inotify_image_test") {
     "../../../../frameworks/native/cache_download:preload_native",
     "../../../../common/utf8_utils:request_utf8_utils",
     "../../common/dir_operation:common_dir_op",
+    "../../common/mock_server:mock_server",
+    "../../common/set_permission:common_permission",
   ]
   external_deps = [
     "ability_runtime:app_context",
@@ -41,6 +44,7 @@ ohos_unittest("inotify_image_test") {
     "hilog:libhilog",
     "hisysevent:libhisysevent",
     "icu:shared_icuuc",
+    "openssl:libcrypto_shared",
     "rust_cxx:cxx_cppdeps",
   ]
 }

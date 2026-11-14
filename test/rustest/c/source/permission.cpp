@@ -20,6 +20,7 @@
 
 #include "accesstoken_kit.h"
 #include "nativetoken_kit.h"
+#include "perm_setproc_c.h"
 #include "token_setproc.h"
 
 void SetAccessTokenPermission()
@@ -65,5 +66,20 @@ void SetAccessTokenPermission()
     ret = OHOS::Security::AccessToken::AccessTokenKit::ReloadNativeTokenInfo();
     if (ret < 0) {
         return;
+    }
+
+    // Re-set kernel permission bits with the opCode resolved by the dynamic
+    // AccessTokenKit (libaccesstoken_sdk), which is the same resolver used later
+    // by check_permission -> VerifyAccessToken -> AccessTokenKit::TransferPermissionToOpcode.
+    // GetAccessTokenId above sets bits via the statically-linked permission_map
+    // (from nativetoken), whose opCode table can diverge from the dynamic one
+    // (e.g. INTERNET maps to different indices). Setting bits with the dynamic
+    // opCode guarantees the bit queried later is the bit granted here.
+    for (const auto &perm : permissions) {
+        uint32_t opCode = 0;
+        if (!OHOS::Security::AccessToken::AccessTokenKit::TransferPermissionToOpcode(perm, opCode)) {
+            continue;
+        }
+        (void)::SetPermissionToKernel(static_cast<uint32_t>(tokenId), static_cast<int32_t>(opCode), true);
     }
 }

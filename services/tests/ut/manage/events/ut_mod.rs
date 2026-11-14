@@ -25,6 +25,8 @@ use crate::service::active_counter::ActiveCounter;
 use crate::manage::TaskManager;
 use crate::service::client::{ClientManager, ClientManagerEntry};
 use crate::service::run_count::{RunCountManager, RunCountManagerEntry};
+use request_utils::test::server::{mock_server, HTTP_OK};
+use std::sync::LazyLock;
 
 static CLIENT: Lazy<ClientManagerEntry> = Lazy::new(|| ClientManager::init());
 static RUN_COUNT_MANAGER: Lazy<RunCountManagerEntry> = Lazy::new(|| RunCountManager::init());
@@ -32,6 +34,14 @@ static NETWORK: Lazy<Network> = Lazy::new(|| Network::new());
 
 static TASK_MANGER: Lazy<TaskManagerTx> =
     Lazy::new(|| TaskManager::init(RUN_COUNT_MANAGER.clone(), CLIENT.clone(), ActiveCounter::new(), NETWORK.clone()));
+
+// Local mock-server URLs (127.0.0.1, OS-assigned port): the historical public
+// URLs (gitee test.txt / a feishucdn installer) are replaced so the suite
+// never touches the network. The installer mock keeps a large body so the
+// download is still "in flight" when the pause/stop/resume events fire.
+static MOCK_TXT_URL: LazyLock<String> = LazyLock::new(|| mock_server(HTTP_OK, vec![b'A'; 1024]));
+static MOCK_EXE_URL: LazyLock<String> = LazyLock::new(|| mock_server(HTTP_OK, vec![0u8; 10485760]));
+
 fn build_task() {}
 
 fn init() {
@@ -60,7 +70,7 @@ fn ut_task_manager_construct() {
     .action(Action::Download)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt")
+    .url(MOCK_TXT_URL.as_str())
     .redirect(true)
     .build();
     let (event, rx) = TaskManagerEvent::construct(config);
@@ -90,7 +100,7 @@ fn ut_task_manager_start() {
     .action(Action::Download)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://sf3-cn.feishucdn.com/obj/ee-appcenter/47273f95/Feishu-win32_ia32-7.9.7-signed.exe")
+    .url(MOCK_EXE_URL.as_str())
     .redirect(true)
     .uid(uid)
     .build();
@@ -127,7 +137,7 @@ fn ut_task_manager_pause_resume() {
     .action(Action::Download)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://sf3-cn.feishucdn.com/obj/ee-appcenter/47273f95/Feishu-win32_ia32-7.9.7-signed.exe")
+    .url(MOCK_EXE_URL.as_str())
     .redirect(true)
     .uid(uid)
     .build();
@@ -166,7 +176,7 @@ fn ut_task_manager_stop_resume() {
     .action(Action::Download)
     .mode(Mode::BackGround)
     .file_spec(file)
-    .url("https://sf3-cn.feishucdn.com/obj/ee-appcenter/47273f95/Feishu-win32_ia32-7.9.7-signed.exe")
+    .url(MOCK_EXE_URL.as_str())
     .redirect(true)
     .uid(uid)
     .build();

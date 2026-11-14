@@ -60,6 +60,7 @@ void PreloadGetInfo::SetUp(void)
     GTEST_LOG_(INFO) << testCaseName.append(" start");
     std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
     SetPermission::SetAccessTokenPermission(permissions, "preload_test");
+    TEST_URL_0 = GetMockBaseUrl() + "/test.txt";
 }
 
 void PreloadGetInfo::TearDown(void)
@@ -313,8 +314,7 @@ HWTEST_F(PreloadGetInfo, ServerAddrInfo, TestSize.Level1)
  */
 HWTEST_F(PreloadGetInfo, HttpFailCallbackInfo, TestSize.Level1)
 {
-    std::string invalidUtf8Url = "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/"
-                                 "notExistResource.txt";
+    std::string invalidUtf8Url = GetMockBaseUrl() + "/notExistResource.txt";
     Preload::GetInstance()->Remove(invalidUtf8Url);
     EXPECT_FALSE(Preload::GetInstance()->Contains(invalidUtf8Url));
 

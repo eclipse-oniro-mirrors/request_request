@@ -18,8 +18,26 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
 
+#include "mock_http_server.h"
 #include "request_preload.h"
+
+// Path where the embedded test CA (TestCert::CA_PEM) is staged at runtime so
+// PreloadOptions.caPath can point curl at it; the HTTPS mock server itself
+// loads its certificate from memory, so no files are pushed or checked in.
+inline const std::string TEST_CA_PATH = "/data/local/tmp/test_ca.pem";
+
+// Lazily start the shared HTTP mock server (127.0.0.1, OS-assigned port) and
+// register every route the preload tests need. Returns the base URL, e.g.
+// "http://127.0.0.1:38211". Idempotent: routes are only registered once.
+const std::string &GetMockBaseUrl();
+
+// Lazily start the shared HTTPS mock server (self-signed cert). Separate
+// instance/port from the HTTP one so both can coexist. Returns e.g.
+// "https://127.0.0.1:38212".
+const std::string &GetMockHttpsBaseUrl();
+
 struct TestCallback {
     TestCallback(size_t size = 0);
     std::shared_ptr<std::atomic_bool> flagS;

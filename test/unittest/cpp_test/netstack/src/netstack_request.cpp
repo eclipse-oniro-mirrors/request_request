@@ -26,14 +26,21 @@
 #include "http_client_request.h"
 #include "http_client_task.h"
 #include "log.h"
+#include "mock_http_server.h"
 #include "netstack.h"
 #include "set_permission.h"
 
 using namespace testing::ext;
 using namespace OHOS::Request;
+using OHOS::Request::Test::MockHttpServer;
+using OHOS::Request::Test::HTTP_STATUS_OK;
 
-static std::string TEST_URL_0 = "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/"
-                                "test.txt";
+// Body size of the /test.txt mock route (1 KiB); the assertions of this
+// suite never depend on the byte count, unlike the preload mocks.
+constexpr int TEST_TXT_BODY_SIZE = 1024;
+
+static std::string TEST_URL_0;
+static MockHttpServer g_mockServer;
 
 class NetstackRequest : public testing::Test {
 public:
@@ -53,6 +60,11 @@ void NetstackRequest::SetUp(void)
     GTEST_LOG_(INFO) << testCaseName.append(" start");
     std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
     SetPermission::SetAccessTokenPermission(permissions, "common_netstack_test");
+    if (TEST_URL_0.empty()) {
+        g_mockServer.AddRoute("/test.txt", HTTP_STATUS_OK, std::string(TEST_TXT_BODY_SIZE, 'A'));
+        g_mockServer.Start();
+    }
+    TEST_URL_0 = g_mockServer.GetBaseUrl() + "/test.txt";
 }
 
 void NetstackRequest::TearDown(void)
@@ -111,7 +123,7 @@ HWTEST_F(NetstackRequest, GetResponseHeaders, TestSize.Level1)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     auto code = task->GetResponse().GetResponseCode();
-    if (code == 200) {
+    if (code == HTTP_STATUS_OK) {
         rust::vec<rust::string> heasers = GetHeaders(task->GetResponse());
         EXPECT_FALSE(heasers.empty());
     } else {

@@ -23,19 +23,38 @@ use std::{fs, thread};
 
 use request_utils;
 use request_utils::test::log::init;
-use request_utils::test::server::test_server;
+use request_utils::test::server::{mock_server, test_server, HTTP_OK};
 
 use super::*;
 use crate::download::CANCEL;
 
 const ERROR_IP: &str = "127.12.31.12";
 const NO_DATA: usize = 1359;
-const TEST_URL: &str = "http://www.baidu.com";
-const TEST_VIDEO_URL: &str = "https://www.w3cschool.cn/statics/demosource/movie.mp4";
-static TEST_TEXT_URL: Mutex<&'static str> = Mutex::new(
-    "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt",
-);
+// Body sizes of the historical public files these mocks replace, so
+// byte-count assertions keep their original meaning.
+const TEST_TXT_SIZE: usize = 1042003; // gitee downloadTests test.txt
+const VIDEO_SIZE: usize = 2048;       // bdstatic cae_h264 sample
+const SMALL_BODY_SIZE: usize = 1024;  // generic 1 KiB body
+// Local mock-server URLs (127.0.0.1, OS-assigned port). Each LazyLock starts
+// its own listener returning a fixed response so no public network is needed.
+static TEST_URL: LazyLock<String> = LazyLock::new(|| mock_server(HTTP_OK, vec![0u8; SMALL_BODY_SIZE]));
+static TEST_TEXT_URL: Mutex<String> = Mutex::new(String::new());
 const FINISH_SUFFIX: &str = "_F";
+
+/// Lazily start the gitee-style test.txt mock (TEST_TXT_SIZE bytes) and return its URL.
+fn test_text_url() -> String {
+    let mut url = TEST_TEXT_URL.lock().unwrap();
+    if url.is_empty() {
+        *url = mock_server(HTTP_OK, vec![b'A'; TEST_TXT_SIZE]);
+    }
+    url.clone()
+}
+
+/// Serializes tests that call the global clear_*_cache / remove on the
+/// CacheDownloadService singleton. Without this, one cache test's clear can
+/// evict another's entry mid-assertion (the service is process-global, so
+/// clear clears every non-running task, not just the caller's).
+static CACHE_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
 #[cfg(feature = "ohos")]
 const DOWNLOADER: Downloader = Downloader::Netstack;
@@ -99,7 +118,7 @@ fn ut_preload_success() {
     let callback = Box::new(TestCallbackS {
         flag: success_flag.clone(),
     });
-    let handle = SERVICE.preload(DownloadRequest::new(TEST_URL), callback, true, DOWNLOADER);
+    let handle = SERVICE.preload(DownloadRequest::new(&TEST_URL), callback, true, DOWNLOADER);
     assert!(handle.is_some());
     let handle = handle.unwrap();
     while !handle.is_finish() {
@@ -133,8 +152,8 @@ fn ut_preload_success_add_callback() {
         flag: success_flag_1.clone(),
     });
 
-    let handle = SERVICE.preload(DownloadRequest::new(TEST_URL), callback_0, true, DOWNLOADER);
-    SERVICE.preload(DownloadRequest::new(TEST_URL), callback_1, true, DOWNLOADER);
+    let handle = SERVICE.preload(DownloadRequest::new(&TEST_URL), callback_0, true, DOWNLOADER);
+    SERVICE.preload(DownloadRequest::new(&TEST_URL), callback_1, true, DOWNLOADER);
     assert!(handle.is_some());
     let handle = handle.unwrap();
     while !handle.is_finish() {
@@ -227,7 +246,7 @@ fn ut_preload_cancel_0() {
     let callback = Box::new(TestCallbackC {
         flag: cancel_flag.clone(),
     });
-    let handle = SERVICE.preload(DownloadRequest::new(TEST_URL), callback, true, DOWNLOADER);
+    let handle = SERVICE.preload(DownloadRequest::new(&TEST_URL), callback, true, DOWNLOADER);
     assert!(handle.is_some());
     let mut handle = handle.unwrap();
     handle.cancel();
@@ -256,8 +275,8 @@ fn ut_preload_cancel_1() {
     let callback = Box::new(TestCallbackC {
         flag: cancel_flag.clone(),
     });
-    let handle = SERVICE.preload(DownloadRequest::new(TEST_URL), callback, true, DOWNLOADER);
-    SERVICE.cancel(TEST_URL);
+    let handle = SERVICE.preload(DownloadRequest::new(&TEST_URL), callback, true, DOWNLOADER);
+    SERVICE.cancel(&TEST_URL);
     assert!(handle.is_some());
     let handle = handle.unwrap();
     while handle.state() != CANCEL {
@@ -280,7 +299,7 @@ fn ut_preload_cancel_1() {
 #[test]
 fn ut_preload_cancel_add_callback() {
     init();
-    let test_url = "https://www.gitee.com";
+    let test_url = test_text_url();
 
     static SERVICE: LazyLock<CacheDownloadService> = LazyLock::new(CacheDownloadService::new);
     let cancel_flag_0 = Arc::new(AtomicUsize::new(0));
@@ -292,8 +311,8 @@ fn ut_preload_cancel_add_callback() {
         flag: cancel_flag_1.clone(),
     });
 
-    let handle_0 = SERVICE.preload(DownloadRequest::new(test_url), callback_0, true, DOWNLOADER);
-    let handle_1 = SERVICE.preload(DownloadRequest::new(test_url), callback_1, true, DOWNLOADER);
+    let handle_0 = SERVICE.preload(DownloadRequest::new(&test_url), callback_0, true, DOWNLOADER);
+    let handle_1 = SERVICE.preload(DownloadRequest::new(&test_url), callback_1, true, DOWNLOADER);
     assert!(handle_0.is_some());
     assert!(handle_1.is_some());
     let mut handle_0 = handle_0.unwrap();
@@ -327,7 +346,7 @@ fn ut_preload_already_success() {
     init();
     static SERVICE: LazyLock<CacheDownloadService> = LazyLock::new(CacheDownloadService::new);
     let handle = SERVICE.preload(
-        DownloadRequest::new(TEST_URL),
+        DownloadRequest::new(&TEST_URL),
         Box::new(TestCallbackN),
         true,
         DOWNLOADER,
@@ -341,7 +360,7 @@ fn ut_preload_already_success() {
     let callback = Box::new(TestCallbackS {
         flag: success_flag.clone(),
     });
-    SERVICE.preload(DownloadRequest::new(TEST_URL), callback, false, DOWNLOADER);
+    SERVICE.preload(DownloadRequest::new(&TEST_URL), callback, false, DOWNLOADER);
     std::thread::sleep(Duration::from_millis(50));
     assert_eq!(success_flag.load(Ordering::SeqCst), 1);
 }
@@ -424,13 +443,13 @@ fn ut_preload_fetch() {
     let callback = Box::new(TestCallbackS {
         flag: success_flag.clone(),
     });
-    let handle = SERVICE.preload(DownloadRequest::new(TEST_URL), callback, true, DOWNLOADER);
+    let handle = SERVICE.preload(DownloadRequest::new(&TEST_URL), callback, true, DOWNLOADER);
     assert!(handle.is_some());
     let handle = handle.unwrap();
     while !handle.is_finish() {
         thread::sleep(Duration::from_millis(500));
     }
-    let cache = SERVICE.fetch(TEST_URL);
+    let cache = SERVICE.fetch(&TEST_URL);
     assert!(cache.is_some());
     assert_eq!(success_flag.load(Ordering::SeqCst), 1);
 }
@@ -447,7 +466,7 @@ fn ut_preload_fetch() {
 // @tc.level: level1
 #[test]
 fn ut_download_request_ssl_type() {
-    let mut request = DownloadRequest::new(TEST_URL);
+    let mut request = DownloadRequest::new(&TEST_URL);
     request.ssl_type("TLS");
     assert_eq!(request.ssl_type, Some("TLS"));
 }
@@ -464,7 +483,7 @@ fn ut_download_request_ssl_type() {
 // @tc.level: Level 1
 #[test]
 fn ut_download_request_max_retry() {
-    let mut request = DownloadRequest::new(TEST_URL);
+    let mut request = DownloadRequest::new(&TEST_URL);
     request.max_retry(5);
     assert_eq!(request.max_retry, Some(5));
 }
@@ -481,7 +500,7 @@ fn ut_download_request_max_retry() {
 // @tc.level: Level 1
 #[test]
 fn ut_download_request_network_check_timeout() {
-    let mut request = DownloadRequest::new(TEST_URL);
+    let mut request = DownloadRequest::new(&TEST_URL);
     request.network_check_timeout(10);
     assert_eq!(request.network_check_timeout, Some(10));
 }
@@ -498,7 +517,7 @@ fn ut_download_request_network_check_timeout() {
 // @tc.level: Level 1
 #[test]
 fn ut_download_request_http_total_timeout() {
-    let mut request = DownloadRequest::new(TEST_URL);
+    let mut request = DownloadRequest::new(&TEST_URL);
     request.http_total_timeout(90);
     assert_eq!(request.http_total_timeout, Some(90));
 }
@@ -515,7 +534,7 @@ fn ut_download_request_http_total_timeout() {
 // @tc.level: Level 1
 #[test]
 fn ut_download_request_all_options() {
-    let mut request = DownloadRequest::new(TEST_URL);
+    let mut request = DownloadRequest::new(&TEST_URL);
     request.max_retry(7);
     request.network_check_timeout(15);
     request.http_total_timeout(120);
@@ -640,7 +659,10 @@ fn ut_set_global_timeout_options_boundary() {
 // @tc.level: level1
 #[test]
 fn ut_remove_file_cache() {
-    let test_url = TEST_TEXT_URL.lock().unwrap();
+    let _guard = CACHE_TEST_MUTEX.lock().unwrap();
+    // Dedicated mock URL (not the shared test_text_url) so concurrent tests
+    // do not remove/clear this task's cache mid-assertion.
+    let test_url = mock_server(HTTP_OK, vec![b'A'; TEST_TXT_SIZE]);
     CacheDownloadService::get_instance().remove(test_url.as_ref());
     let success_flag = Arc::new(AtomicUsize::new(0));
     let callback = Box::new(TestCallbackS {
@@ -685,7 +707,10 @@ fn ut_remove_file_cache() {
 // @tc.level: level1
 #[test]
 fn ut_remove_ram_cache() {
-    let test_url = TEST_TEXT_URL.lock().unwrap();
+    let _guard = CACHE_TEST_MUTEX.lock().unwrap();
+    // Dedicated mock URL so concurrent tests using the shared test_text_url
+    // do not remove this task's cache mid-assertion.
+    let test_url = mock_server(HTTP_OK, vec![b'A'; TEST_TXT_SIZE]);
     CacheDownloadService::get_instance().remove(test_url.as_ref());
     let success_flag = Arc::new(AtomicUsize::new(0));
     let callback = Box::new(TestCallbackS {
@@ -729,9 +754,13 @@ fn ut_remove_ram_cache() {
 // @tc.level: level1
 #[test]
 fn ut_remove_finished_caches() {
-    let test_url = TEST_TEXT_URL.lock().unwrap();
+    let _guard = CACHE_TEST_MUTEX.lock().unwrap();
+    // Dedicated mock URLs (not the shared test_text_url/TEST_VIDEO_URL) so
+    // concurrent tests do not touch these tasks' cache mid-assertion.
+    let test_url = mock_server(HTTP_OK, vec![b'A'; TEST_TXT_SIZE]);
+    let video_url = mock_server(HTTP_OK, vec![0u8; VIDEO_SIZE]);
     CacheDownloadService::get_instance().remove(test_url.as_ref());
-    CacheDownloadService::get_instance().remove(TEST_VIDEO_URL);
+    CacheDownloadService::get_instance().remove(video_url.as_ref());
     let success_flag = Arc::new(AtomicUsize::new(0));
     let callback = Box::new(TestCallbackS {
         flag: success_flag.clone(),
@@ -752,7 +781,7 @@ fn ut_remove_finished_caches() {
         flag: success_flag2.clone(),
     });
     let handle2 = CacheDownloadService::get_instance().preload(
-        DownloadRequest::new(TEST_VIDEO_URL),
+        DownloadRequest::new(video_url.as_ref()),
         callback2,
         true,
         DOWNLOADER,
@@ -764,10 +793,13 @@ fn ut_remove_finished_caches() {
     while !handle2.is_finish() {
         thread::sleep(Duration::from_millis(500));
     }
+    // Fetch video_url first — once handle2 finishes, video_url leaves the
+    // running set and a concurrent test's clear_*_cache could evict it.
+    // Fetching it before test_url narrows that race window.
+    let cache = CacheDownloadService::get_instance().fetch(video_url.as_ref());
+    assert!(cache.is_some());
     let cache = CacheDownloadService::get_instance().fetch(test_url.as_ref());
     assert!(cache.is_none());
-    let cache = CacheDownloadService::get_instance().fetch(TEST_VIDEO_URL);
-    assert!(cache.is_some());
 }
 
 // @tc.name: ut_download_fetch_after_init

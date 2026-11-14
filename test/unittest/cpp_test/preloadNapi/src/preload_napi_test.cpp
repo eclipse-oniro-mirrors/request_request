@@ -26,15 +26,20 @@
 #include "log.h"
 #include "preload_callback_test.h"
 #include "request_preload.h"
+#include "set_permission.h"
 
 using namespace testing::ext;
 using namespace OHOS::Request;
 using namespace OHOS::AbilityRuntime;
 using namespace std;
 
+// Forward declare the mock-server accessor defined in preload/src/common.cpp
+// (we compile that translation unit but do not include preload's common.h, which
+// would clash with this file's own TestCallback).
+const std::string &GetMockBaseUrl();
+
 constexpr size_t SLEEP_INTERVAL = 100;
-static std::string g_testUrlNotExist = "https://www.gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/"
-                                       "test_not_exist.txt";
+static std::string g_testUrlNotExist;
 class PreloadNapiTest : public testing::Test {
 public:
     void SetUp();
@@ -50,6 +55,9 @@ void PreloadNapiTest::SetUp(void)
     string testCaseName = string(testInfo->name());
     REQUEST_HILOGI("[SetUp] %{public}s start", testCaseName.c_str());
     GTEST_LOG_(INFO) << testCaseName.append(" start");
+    std::vector<std::string> permissions = { "ohos.permission.INTERNET", "ohos.permission.GET_NETWORK_INFO" };
+    SetPermission::SetAccessTokenPermission(permissions, "preload_napi_test");
+    g_testUrlNotExist = GetMockBaseUrl() + "/test_not_exist.txt";
 }
 
 /**

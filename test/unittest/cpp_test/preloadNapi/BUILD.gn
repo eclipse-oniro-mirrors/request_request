@@ -18,12 +18,16 @@ ohos_unittest("preload_napi_test") {
 
   include_dirs = [
     "include",
+    "../preload/include",
+    "../../common/mock_server/include",
+    "../../../../common/include",
     "../../../../frameworks/js/napi/preload_napi/include",
     "../../../../interfaces/inner_kits/cache_download/napi/include",
     "../../../../interfaces/inner_kits/cache_download/native/include",
   ]
 
   sources = [
+    "../preload/src/common.cpp",
     "../../../../frameworks/js/napi/preload_napi/src/napi_utils.cpp",
     "../../../../frameworks/js/napi/preload_napi/src/preload_common.cpp",
     "../../../../frameworks/js/napi/preload_napi/src/preload_napi.cpp",
@@ -34,6 +38,8 @@ ohos_unittest("preload_napi_test") {
   deps = [
     "../../../../frameworks/native/cache_download:preload_native",
     "../../../../common/utf8_utils:request_utf8_utils",
+    "../../common/mock_server:mock_server",
+    "../../common/set_permission:common_permission",
   ]
   external_deps = [
     "bundle_framework:appexecfwk_core_headers",

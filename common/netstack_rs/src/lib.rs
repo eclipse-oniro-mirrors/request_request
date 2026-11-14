@@ -24,6 +24,8 @@
 //! * [`error`] - Error types and handling
 //! * [`info`] - Types for download and performance information
 
+// LazyLock for the test-side mock-server URL statics (tests/ut/ut_task.rs).
+#![feature(lazy_cell)]
 #![warn(
     missing_docs,
     clippy::redundant_static_lifetimes,

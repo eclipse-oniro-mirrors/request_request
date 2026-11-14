@@ -1095,7 +1095,7 @@ export default function requestQueryTest() {
     it('testCreateDownloadTask001', 0, async (done: Function) => {
       let conf: request.agent.Config = {
         action: request.agent.Action.DOWNLOAD,
-        url: 'https://gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt',
+        url: baseUrl + '/test.txt',
         saveas: 'testCreateDownloadTask001.txt'
       };
       request.agent.create(context, conf).then(async (data) => {
@@ -1122,7 +1122,7 @@ export default function requestQueryTest() {
     it('testCreateDownloadTask002', 0, async (done: Function) => {
       let conf: request.agent.Config = {
         action: request.agent.Action.DOWNLOAD,
-        url: 'https://gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt',
+        url: baseUrl + '/test.txt',
         saveas: 'testCreateDownloadTask002.txt',
         token: '12345678'
       };
@@ -1348,7 +1348,7 @@ export default function requestQueryTest() {
     it('testTouchTaskWithValidToken001', 0, async (done: Function) => {
       let conf: request.agent.Config = {
         action: request.agent.Action.DOWNLOAD,
-        url: 'https://gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt',
+        url: baseUrl + '/test.txt',
         saveas: 'testTouchTaskWithValidToken001.txt',
         token: '12345678'
       };
@@ -1375,7 +1375,7 @@ export default function requestQueryTest() {
     it('testRemoveTaskWithValidTid001', 0, async (done: Function) => {
       let conf: request.agent.Config = {
         action: request.agent.Action.DOWNLOAD,
-        url: 'https://gitee.com/tiga-ultraman/downloadTests/releases/download/v1.01/test.txt',
+        url: baseUrl + '/test.txt',
         saveas: 'testRemoveTaskWithValidTid001.txt',
         token: '12345678'
       };
