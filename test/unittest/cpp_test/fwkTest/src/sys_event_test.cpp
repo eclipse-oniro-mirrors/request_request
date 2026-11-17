@@ -1,0 +1,173 @@
+/*
+ * Copyright (c) 2026 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include <string>
+#define private public
+#define protected public
+
+#include <gtest/gtest.h>
+
+#include <cstdint>
+#include <unordered_map>
+
+#include "gmock/gmock.h"
+#include "log.h"
+#include "sys_event.h"
+
+using namespace testing::ext;
+using namespace OHOS::Request;
+
+#undef private
+#undef protected
+
+class SysEventTest : public testing::Test {
+public:
+    static void SetUpTestCase(void);
+    static void TearDownTestCase(void);
+    void SetUp();
+    void TearDown();
+};
+
+void SysEventTest::SetUpTestCase(void)
+{
+    // input testSuit setup step，setup invoked before all testCases
+}
+
+void SysEventTest::TearDownTestCase(void)
+{
+    // input testSuit teardown step，teardown invoked after all testCases
+}
+
+void SysEventTest::SetUp(void)
+{
+    // input testCase setup step，setup invoked before each testCase
+    testing::UnitTest *test = testing::UnitTest::GetInstance();
+    ASSERT_NE(test, nullptr);
+    const testing::TestInfo *testInfo = test->current_test_info();
+    ASSERT_NE(testInfo, nullptr);
+    string testCaseName = string(testInfo->name());
+    REQUEST_HILOGI("[SetUp] %{public}s start", testCaseName.c_str());
+    GTEST_LOG_(INFO) << testCaseName.append(" start");
+}
+
+void SysEventTest::TearDown(void)
+{
+    // input testCase teardown step，teardown invoked after each testCase
+}
+
+/**
+ * @tc.name: SysEventName001
+ * @tc.desc: The hisysevent names and the routing table of SysEventLog are
+ *           stable, hiview analysis depends on them
+ * @tc.precon: NA
+ * @tc.step: 1. Check STATISTIC_EVENT and FAULT_EVENT literal values
+ *           2. Check that sysEventMap_ routes exactly these two names
+ * @tc.expect: Event names are "EXEC_ERROR"/"EXEC_FAULT" and sysEventMap_
+ *             contains exactly those two entries
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(SysEventTest, SysEventName001, TestSize.Level1)
+{
+    EXPECT_STREQ(STATISTIC_EVENT, "EXEC_ERROR");
+    EXPECT_STREQ(FAULT_EVENT, "EXEC_FAULT");
+
+    EXPECT_EQ(SysEventLog::sysEventMap_.size(), static_cast<size_t>(2));
+    EXPECT_NE(SysEventLog::sysEventMap_.find(STATISTIC_EVENT), SysEventLog::sysEventMap_.end());
+    EXPECT_NE(SysEventLog::sysEventMap_.find(FAULT_EVENT), SysEventLog::sysEventMap_.end());
+}
+
+/**
+ * @tc.name: SysEventDfxCode001
+ * @tc.desc: Spot-check the DfxErrorCode bitmask layout: the class nibble in
+ *           the low byte, the subsystem nibble in bits 8-15, and full-value
+ *           sentinels used by fuzzing/hiview
+ * @tc.precon: NA
+ * @tc.step: 1. Compare representative DfxErrorCode values against their
+ *           documented constants
+ * @tc.expect: Values match the documented constants
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(SysEventTest, SysEventDfxCode001, TestSize.Level1)
+{
+    EXPECT_EQ(static_cast<uint32_t>(APP_ERROR_00), 0x00000000u);
+    EXPECT_EQ(static_cast<uint32_t>(APP_ERROR_01), 0x00000001u);
+    EXPECT_EQ(static_cast<uint32_t>(INVALID_IPC_MESSAGE_A00), 0x001FFFFFu);
+    EXPECT_EQ(static_cast<uint32_t>(INVALID_IPC_MESSAGE_00), 0x00100000u);
+    EXPECT_EQ(static_cast<uint32_t>(TASK_FAULT_00), 0x002F00FFu);
+    EXPECT_EQ(static_cast<uint32_t>(UDS_FAULT_00), 0x00300000u);
+    EXPECT_EQ(static_cast<uint32_t>(SA_ERROR_00), 0x004F0000u);
+    EXPECT_EQ(static_cast<uint32_t>(ACL_FAULT_00), 0xF0000000u);
+    EXPECT_EQ(static_cast<uint32_t>(IPC_FAULT_00), 0xF0100000u);
+    EXPECT_EQ(static_cast<uint32_t>(IPC_FAULT_01), 0xF0100001u);
+    EXPECT_EQ(static_cast<uint32_t>(RDB_FAULT_13), 0xF06FFFFFu);
+    EXPECT_EQ(static_cast<uint32_t>(STANDARD_FAULT_00), 0xF1000000u);
+}
+
+/**
+ * @tc.name: SendSysEventLogUnknownEvent001
+ * @tc.desc: SendSysEventLog is a silent no-op for an event name that is not in
+ *           sysEventMap_
+ * @tc.precon: NA
+ * @tc.step: 1. Check that the unknown event name is absent from sysEventMap_
+ *           2. Call the 3 overloads of SendSysEventLog with the unknown name
+ * @tc.expect: The lookup precondition holds and the calls complete without
+ *             crashing (the build disables exceptions, so any fault aborts the
+ *             test process and fails the case)
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(SysEventTest, SendSysEventLogUnknownEvent001, TestSize.Level1)
+{
+    const std::string unknown = "NOT_A_REQUEST_EVENT";
+    EXPECT_EQ(SysEventLog::sysEventMap_.find(unknown), SysEventLog::sysEventMap_.end());
+
+    SysEventLog::SendSysEventLog(unknown, IPC_FAULT_00, "extra");
+    SysEventLog::SendSysEventLog(unknown, IPC_FAULT_00, "bundle", "module", "extra");
+    SysEventLog::SendSysEventLog(unknown, IPC_FAULT_00, 1, 2);
+}
+
+/**
+ * @tc.name: SendSysEventLogKnownEvent001
+ * @tc.desc: The known-event overloads build a SysEventInfo and reach
+ *           HiSysEventWrite; the write itself may fail under the test
+ *           process's SELinux policy, the caller-visible contract is only
+ *           "must not crash"
+ * @tc.precon: NA
+ * @tc.step: 1. Check that FAULT_EVENT and STATISTIC_EVENT are routed in
+ *              sysEventMap_
+ *           2. Call the 3 overloads of SendSysEventLog with both event names
+ * @tc.expect: The routing precondition holds and the calls complete without
+ *             crashing (any fault aborts the test process and fails the case)
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(SysEventTest, SendSysEventLogKnownEvent001, TestSize.Level1)
+{
+    EXPECT_NE(SysEventLog::sysEventMap_.find(FAULT_EVENT), SysEventLog::sysEventMap_.end());
+    EXPECT_NE(SysEventLog::sysEventMap_.find(STATISTIC_EVENT), SysEventLog::sysEventMap_.end());
+
+    SysEventLog::SendSysEventLog(FAULT_EVENT, IPC_FAULT_00, std::to_string(-1));
+    SysEventLog::SendSysEventLog(FAULT_EVENT, IPC_FAULT_01, "com.test.bundle", "entry", "extraInfo");
+    SysEventLog::SendSysEventLog(FAULT_EVENT, TASK_FAULT_00, 60, 55);
+    SysEventLog::SendSysEventLog(STATISTIC_EVENT, APP_ERROR_01, "extraInfo");
+    SysEventLog::SendSysEventLog(STATISTIC_EVENT, APP_ERROR_02, "com.test.bundle", "entry", "extraInfo");
+    SysEventLog::SendSysEventLog(STATISTIC_EVENT, APP_ERROR_00, 100, 90);
+}

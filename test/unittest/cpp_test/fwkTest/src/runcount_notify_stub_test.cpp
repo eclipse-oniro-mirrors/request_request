@@ -139,3 +139,132 @@ HWTEST_F(RuncountNotifyStubTest, OnRemoteRequestTest001, TestSize.Level1)
     EXPECT_NE(runCount.OnRemoteRequest(code, data1, reply, option), 0);
     code = static_cast<uint32_t>(RequestNotifyInterfaceCode::REQUEST_NOTIFY_RUNCOUNT);
 }
+
+/**
+ * @tc.name: OnRemoteRequestTest002
+ * @tc.desc: OnRemoteRequest falls through to the default IPC stub handler when
+ *           the caller sends a wrong interface token
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare MessageParcel with a foreign interface token
+ *           2. Call OnRemoteRequest with REQUEST_NOTIFY_RUNCOUNT code
+ * @tc.expect: Return value is not OHOS::ERR_NONE
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RuncountNotifyStubTest, OnRemoteRequestTest002, TestSize.Level1)
+{
+    uint32_t code = static_cast<uint32_t>(RequestNotifyInterfaceCode::REQUEST_NOTIFY_RUNCOUNT);
+    OHOS::MessageParcel data;
+    std::u16string token = u"ohos.foreign.token";
+    data.WriteInterfaceToken(token);
+    data.WriteInt64(0);
+    OHOS::MessageParcel reply;
+    OHOS::MessageOption option;
+    RunCountNotifyStub runCount = RunCountNotifyStub();
+    int32_t ret = runCount.OnRemoteRequest(code, data, reply, option);
+    EXPECT_NE(ret, OHOS::ERR_NONE);
+}
+
+/**
+ * @tc.name: OnRemoteRequestTest003
+ * @tc.desc: OnRemoteRequest rejects REQUEST_NOTIFY_RUNCOUNT from a caller whose
+ *           uid is not the system service uid 3815, and the run count stays
+ *           unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Read the current run count
+ *           2. Prepare MessageParcel with the correct descriptor and a count
+ *              payload
+ *           3. Call OnRemoteRequest with REQUEST_NOTIFY_RUNCOUNT code
+ * @tc.expect: Return value is not OHOS::ERR_NONE and the stored count is unchanged
+ *             (the test process uid differs from 3815)
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RuncountNotifyStubTest, OnRemoteRequestTest003, TestSize.Level1)
+{
+    int old = FwkRunningTaskCountManager::GetInstance()->GetCount();
+    uint32_t code = static_cast<uint32_t>(RequestNotifyInterfaceCode::REQUEST_NOTIFY_RUNCOUNT);
+    OHOS::MessageParcel data;
+    data.WriteInterfaceToken(RunCountNotifyStub().GetDescriptor());
+    data.WriteInt64(old + 1000);
+    OHOS::MessageParcel reply;
+    OHOS::MessageOption option;
+    RunCountNotifyStub runCount = RunCountNotifyStub();
+    int32_t ret = runCount.OnRemoteRequest(code, data, reply, option);
+    EXPECT_NE(ret, OHOS::ERR_NONE);
+    EXPECT_EQ(FwkRunningTaskCountManager::GetInstance()->GetCount(), old);
+}
+
+/**
+ * @tc.name: OnRemoteRequestTest004
+ * @tc.desc: OnRemoteRequest rejects an interface code other than
+ *           REQUEST_NOTIFY_RUNCOUNT even with the correct descriptor
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare MessageParcel with the correct descriptor
+ *           2. Call OnRemoteRequest with an out-of-range code
+ * @tc.expect: Return value is not OHOS::ERR_NONE
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RuncountNotifyStubTest, OnRemoteRequestTest004, TestSize.Level1)
+{
+    uint32_t code = 0xFFFF;
+    OHOS::MessageParcel data;
+    data.WriteInterfaceToken(RunCountNotifyStub().GetDescriptor());
+    data.WriteInt64(0);
+    OHOS::MessageParcel reply;
+    OHOS::MessageOption option;
+    RunCountNotifyStub runCount = RunCountNotifyStub();
+    int32_t ret = runCount.OnRemoteRequest(code, data, reply, option);
+    EXPECT_NE(ret, OHOS::ERR_NONE);
+}
+
+/**
+ * @tc.name: CheckCallingPermissionTest001
+ * @tc.desc: CheckCallingPermission is false for a wrong interface code and for
+ *           a caller that is not the system service uid/token
+ * @tc.precon: NA
+ * @tc.step: 1. Call CheckCallingPermission with the valid code; the test
+ *              process does not run as uid 3815/TOKEN_NATIVE
+ *           2. Call CheckCallingPermission with an invalid code
+ * @tc.expect: Both calls return false
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RuncountNotifyStubTest, CheckCallingPermissionTest001, TestSize.Level1)
+{
+    RunCountNotifyStub runCount = RunCountNotifyStub();
+    uint32_t validCode = static_cast<uint32_t>(RequestNotifyInterfaceCode::REQUEST_NOTIFY_RUNCOUNT);
+    EXPECT_FALSE(runCount.CheckCallingPermission(validCode));
+    EXPECT_FALSE(runCount.CheckCallingPermission(0xFFFF));
+}
+
+/**
+ * @tc.name: OnCallBackTest002
+ * @tc.desc: OnCallBack propagates a negative run count payload into the
+ *           framework running task count manager
+ * @tc.precon: NA
+ * @tc.step: 1. Read the current count and prepare a parcel with a negative
+ *              payload
+ *           2. Call OnCallBack
+ *           3. Restore the previous count
+ * @tc.expect: The stored count equals the negative payload
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RuncountNotifyStubTest, OnCallBackTest002, TestSize.Level1)
+{
+    int64_t payload = -5;
+    int old = FwkRunningTaskCountManager::GetInstance()->GetCount();
+    OHOS::MessageParcel data;
+    data.WriteInt64(payload);
+    RunCountNotifyStub::GetInstance()->OnCallBack(data);
+    EXPECT_EQ(FwkRunningTaskCountManager::GetInstance()->GetCount(), payload);
+    FwkRunningTaskCountManager::GetInstance()->SetCount(old);
+    EXPECT_EQ(FwkRunningTaskCountManager::GetInstance()->GetCount(), old);
+}

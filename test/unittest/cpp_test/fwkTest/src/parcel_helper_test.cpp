@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 #define private public
 #define protected public
@@ -31,6 +32,11 @@ using namespace OHOS::Request;
 
 #undef private
 #undef protected
+
+namespace {
+// Shared loopback fixture URL for every case of this suite.
+const std::string LOCAL_URL = "https://127.0.0.1/data.txt";
+} // namespace
 
 class ParcelHelperTest : public testing::Test {
 public:
@@ -402,9 +408,15 @@ HWTEST_F(ParcelHelperTest, UnMarshalConfigBodyFileName001, TestSize.Level1)
     EXPECT_EQ(config.bodyFileNames[0], "name");
 }
 
-void MarshalBase(OHOS::MessageParcel &data)
+void MarshalBase(OHOS::MessageParcel &data, Reason code = Reason::REASON_OK, const char *tid = "tid",
+    uint32_t tries = 0, uint32_t priority = 0, const std::string &url = LOCAL_URL)
 {
     TaskInfo info;
+    info.code = code;
+    info.tid = tid;
+    info.tries = tries;
+    info.priority = priority;
+    info.url = url;
     data.WriteBool(info.gauge);
     data.WriteBool(info.retry);
     data.WriteUint32(static_cast<uint32_t>(info.action));
@@ -414,7 +426,7 @@ void MarshalBase(OHOS::MessageParcel &data)
     data.WriteString("uid");
     data.WriteString("bundle");
     data.WriteString(info.url);
-    data.WriteString("tid");
+    data.WriteString(info.tid);
     data.WriteString(info.title);
     data.WriteString("mimeType");
     data.WriteUint64(info.ctime);
@@ -737,4 +749,43 @@ HWTEST_F(ParcelHelperTest, CommonUtilsGetMsgByReason001, TestSize.Level1)
     EXPECT_EQ(CommonUtils::GetMsgByReason(NETWORK_APP_ACCOUNT), CommonUtils::NETWORK_ACCOUNT_APP_INFO);
     Reason code = static_cast<Reason>(1000);
     EXPECT_EQ(CommonUtils::GetMsgByReason(code), "unknown");
+}
+
+/**
+ * @tc.name: UnMarshalBaseFaultFill001
+ * @tc.desc: UnMarshalBase fills faults and reason from a non-OK task code and
+ *           leaves both fields untouched when the code is REASON_OK
+ * @tc.precon: NA
+ * @tc.step: 1. Marshal a base TaskInfo stream whose code is NETWORK_OFFLINE
+ *           2. Call UnMarshalBase and check faults/reason
+ *           3. Marshal a stream with REASON_OK over preset sentinel fields
+ * @tc.expect: The offline code maps to Faults::DISCONNECTED and its message;
+ *             the OK code keeps the sentinel values
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ParcelHelperTest, UnMarshalBaseFaultFill001, TestSize.Level1)
+{
+    OHOS::MessageParcel data;
+    MarshalBase(data, Reason::NETWORK_OFFLINE, "task-1", 2, 5);
+    TaskInfo info;
+    ParcelHelper::UnMarshalBase(data, info);
+    EXPECT_EQ(info.code, Reason::NETWORK_OFFLINE);
+    EXPECT_EQ(info.faults, Faults::DISCONNECTED);
+    EXPECT_EQ(info.reason, "NetWork is offline");
+    EXPECT_EQ(info.url, LOCAL_URL);
+    EXPECT_EQ(info.tid, "task-1");
+    EXPECT_EQ(info.tries, 2u);
+    EXPECT_EQ(info.priority, 5u);
+
+    OHOS::MessageParcel okData;
+    MarshalBase(okData);
+    TaskInfo okInfo;
+    okInfo.faults = Faults::SSL;
+    okInfo.reason = "sentinel";
+    ParcelHelper::UnMarshalBase(okData, okInfo);
+    EXPECT_EQ(okInfo.code, Reason::REASON_OK);
+    EXPECT_EQ(okInfo.faults, Faults::SSL);
+    EXPECT_EQ(okInfo.reason, "sentinel");
 }

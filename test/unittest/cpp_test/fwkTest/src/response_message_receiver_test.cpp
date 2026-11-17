@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+#include <fcntl.h>
 #include <securec.h>
 #include <sys/socket.h>
 
@@ -72,10 +73,12 @@ void ResponseMessageReceiverTest::TearDown(void)
     // input testCase teardown step，teardown invoked after each testCase
 }
 
-static constexpr int32_t ARRAY_LEN = 256; // 128 is array length
-static constexpr int32_t INT64_SIZE = 8;  // 8 is int64 and uint64 num length
-static constexpr int32_t INT32_SIZE = 4;  // 4 is int32 and uint32 num length
-static constexpr int32_t INT16_SIZE = 2;  // 2 is int16 and uint16 num length
+static constexpr int32_t ARRAY_LEN = 256;                   // 128 is array length
+static constexpr int32_t INT64_SIZE = 8;                    // 8 is int64 and uint64 num length
+static constexpr int32_t INT32_SIZE = 4;                    // 4 is int32 and uint32 num length
+static constexpr int32_t INT16_SIZE = 2;                    // 2 is int16 and uint16 num length
+static constexpr int32_t FAULTS_BODY_SIZE = INT32_SIZE * 3; // tid + type + reason, one int32 each
+static constexpr int32_t WAIT_BODY_SIZE = INT32_SIZE * 2;   // taskId + reason, one int32 each
 
 /**
  * @tc.name: Int64FromParcel001
@@ -899,4 +902,497 @@ HWTEST_F(ResponseMessageReceiverTest, OnReadable001, TestSize.Level1)
     receiver.OnReadable(fd[0]);
     EXPECT_EQ(close(fd[0]), 0);
     EXPECT_EQ(close(fd[1]), 0);
+}
+
+class RMRecordHandler : public IResponseMessageHandler {
+public:
+    RMRecordHandler(){};
+    ~RMRecordHandler(){};
+    void OnResponseReceive(const std::shared_ptr<Response> &response) override
+    {
+        responseCount_++;
+    }
+    void OnNotifyDataReceive(const std::shared_ptr<NotifyData> &notifyData) override
+    {
+        notifyCount_++;
+    }
+    void OnFaultsReceive(const std::shared_ptr<int32_t> &tid, const std::shared_ptr<SubscribeType> &type,
+        const std::shared_ptr<Reason> &reason) override
+    {
+        faultsCount_++;
+    }
+    void OnChannelBroken() override
+    {
+    }
+    void OnWaitReceive(std::int32_t taskId, WaitingReason reason) override
+    {
+        waitCount_++;
+    }
+    int responseCount_ = 0;
+    int notifyCount_ = 0;
+    int faultsCount_ = 0;
+    int waitCount_ = 0;
+};
+
+static int32_t AppendBytes(char *dst, int32_t dstSize, const void *src, int32_t srcLen)
+{
+    if (memcpy_s(dst, dstSize, src, srcLen) != EOK) {
+        return -1;
+    }
+    return srcLen;
+}
+
+static int32_t BuildResponseBody(char *buf)
+{
+    int32_t tid = 123;
+    string version = "version";
+    int32_t statusCode = 456;
+    string reason = "reason";
+    string headers = "header:aaa,bbb,ccc\n";
+    int32_t pos = 0;
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &tid, sizeof(tid));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, version.c_str(), version.size() + 1);
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &statusCode, sizeof(statusCode));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, reason.c_str(), reason.size() + 1);
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, headers.c_str(), headers.size() + 1);
+    return pos;
+}
+
+static int32_t BuildNotifyBody(char *buf)
+{
+    int32_t length = 1;
+    SubscribeType type = SubscribeType::COMPLETED;
+    uint32_t taskId = 9;
+    State state = State::ANY;
+    uint32_t index = 456;
+    uint64_t processed = 123456;
+    uint64_t totalProcessed = 111222;
+    int64_t value = 333444;
+    char keyValue[] = "key\0value\0";
+    Action action = Action::UPLOAD;
+    Version version = Version::API10;
+    string path = "path";
+    int32_t responseCode = NETWORK_OFFLINE;
+    string message = "message";
+    int32_t pos = 0;
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &type, sizeof(type));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &taskId, sizeof(taskId));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &state, sizeof(state));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &index, sizeof(index));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &processed, sizeof(processed));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &totalProcessed, sizeof(totalProcessed));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &length, sizeof(length));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &value, sizeof(value));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &length, sizeof(length));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, keyValue, sizeof(keyValue) - 1);
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &action, sizeof(action));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &version, sizeof(version));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &length, sizeof(length));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, path.c_str(), path.size() + 1);
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, &responseCode, sizeof(responseCode));
+    pos += AppendBytes(buf + pos, ARRAY_LEN - pos, message.c_str(), message.size() + 1);
+    return pos;
+}
+
+static int32_t BuildFaultsBody(char *buf, int32_t tid)
+{
+    uint32_t type = static_cast<uint32_t>(SubscribeType::COMPLETED);
+    uint32_t reason = 0x30;
+    int32_t pos = 0;
+    pos += AppendBytes(buf + pos, FAULTS_BODY_SIZE - pos, &tid, sizeof(tid));
+    pos += AppendBytes(buf + pos, FAULTS_BODY_SIZE - pos, &type, sizeof(type));
+    pos += AppendBytes(buf + pos, FAULTS_BODY_SIZE - pos, &reason, sizeof(reason));
+    return pos;
+}
+
+static int32_t BuildWaitBody(char *buf, int32_t tid)
+{
+    uint32_t reason = static_cast<uint32_t>(WaitingReason::TaskQueueFull);
+    int32_t pos = 0;
+    pos += AppendBytes(buf + pos, WAIT_BODY_SIZE - pos, &tid, sizeof(tid));
+    pos += AppendBytes(buf + pos, WAIT_BODY_SIZE - pos, &reason, sizeof(reason));
+    return pos;
+}
+
+static void SendFrame(int peerFd, int16_t msgType, int32_t msgId, const char *body, int32_t bodyLen)
+{
+    char frame[256];
+    int32_t magic = static_cast<int32_t>(ResponseMessageReceiver::RESPONSE_MAGIC_NUM);
+    int16_t bodySize = static_cast<int16_t>(bodyLen);
+    int32_t pos = 0;
+    pos += AppendBytes(frame + pos, sizeof(frame) - pos, &magic, sizeof(magic));
+    pos += AppendBytes(frame + pos, sizeof(frame) - pos, &msgId, sizeof(msgId));
+    pos += AppendBytes(frame + pos, sizeof(frame) - pos, &msgType, sizeof(msgType));
+    pos += AppendBytes(frame + pos, sizeof(frame) - pos, &bodySize, sizeof(bodySize));
+    if (bodyLen > 0) {
+        pos += AppendBytes(frame + pos, sizeof(frame) - pos, body, bodyLen);
+    }
+    EXPECT_EQ(write(peerFd, frame, pos), pos);
+}
+
+static void DrainEcho(int peerFd)
+{
+    uint32_t echo = 0;
+    EXPECT_EQ(read(peerFd, &echo, sizeof(echo)), static_cast<ssize_t>(sizeof(echo)));
+}
+
+/**
+ * @tc.name: ReasonFromParcelTest001
+ * @tc.desc: ReasonFromParcel returns -1 on truncated buffer and parses the raw
+ *           uint32 reason value when the buffer is large enough
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a 2-byte buffer holding a uint32 reason value
+ *           2. Call ReasonFromParcel and expect -1
+ *           3. Retry with the full 4-byte buffer and check the parsed value
+ * @tc.expect: Truncated input returns -1; full input returns 0 with the value cast to Reason
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, ReasonFromParcelTest001, TestSize.Level1)
+{
+    Reason reason;
+    uint32_t value = 0x30;
+    char buf[INT32_SIZE];
+    EXPECT_EQ(memcpy_s(buf, sizeof(buf), &value, sizeof(value)), 0);
+    char *parcel = buf;
+    int size = INT16_SIZE;
+    EXPECT_EQ(ResponseMessageReceiver::ReasonFromParcel(reason, parcel, size), -1);
+    parcel = buf;
+    size = INT32_SIZE;
+    EXPECT_EQ(ResponseMessageReceiver::ReasonFromParcel(reason, parcel, size), 0);
+    EXPECT_EQ(reason, static_cast<Reason>(value));
+    EXPECT_EQ(size, 0);
+}
+
+/**
+ * @tc.name: ReasonDataFromParcelTest001
+ * @tc.desc: ReasonDataFromParcel parses tid/type/reason and fails at each of the
+ *           three fields when the buffer is progressively truncated
+ * @tc.precon: NA
+ * @tc.step: 1. Build a 12-byte body of tid, subscribe type and reason
+ *           2. Call ReasonDataFromParcel with 3/6/10-byte sizes and expect -1
+ *           3. Retry with the full body and verify all three parsed values
+ * @tc.expect: Each truncation returns -1; the full body returns 0 with matching fields
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, ReasonDataFromParcelTest001, TestSize.Level1)
+{
+    int32_t tid = 7;
+    uint32_t type = static_cast<uint32_t>(SubscribeType::COMPLETED);
+    uint32_t reasonValue = 0x30;
+    char buf[INT32_SIZE * 3];
+    int pos = 0;
+    EXPECT_EQ(memcpy_s(buf + pos, sizeof(buf) - pos, &tid, sizeof(tid)), 0);
+    pos += sizeof(tid);
+    EXPECT_EQ(memcpy_s(buf + pos, sizeof(buf) - pos, &type, sizeof(type)), 0);
+    pos += sizeof(type);
+    EXPECT_EQ(memcpy_s(buf + pos, sizeof(buf) - pos, &reasonValue, sizeof(reasonValue)), 0);
+    auto tidPtr = std::make_shared<int32_t>();
+    auto typePtr = std::make_shared<SubscribeType>();
+    auto reasonPtr = std::make_shared<Reason>();
+    char *parcel = buf;
+    int size = INT32_SIZE - 1;
+    EXPECT_EQ(ResponseMessageReceiver::ReasonDataFromParcel(tidPtr, typePtr, reasonPtr, parcel, size), -1);
+    parcel = buf;
+    size = INT32_SIZE + INT16_SIZE;
+    EXPECT_EQ(ResponseMessageReceiver::ReasonDataFromParcel(tidPtr, typePtr, reasonPtr, parcel, size), -1);
+    parcel = buf;
+    size = INT32_SIZE * 2 + INT16_SIZE;
+    EXPECT_EQ(ResponseMessageReceiver::ReasonDataFromParcel(tidPtr, typePtr, reasonPtr, parcel, size), -1);
+    parcel = buf;
+    size = INT32_SIZE * 3;
+    EXPECT_EQ(ResponseMessageReceiver::ReasonDataFromParcel(tidPtr, typePtr, reasonPtr, parcel, size), 0);
+    EXPECT_EQ(*tidPtr, tid);
+    EXPECT_EQ(*typePtr, SubscribeType::COMPLETED);
+    EXPECT_EQ(*reasonPtr, static_cast<Reason>(reasonValue));
+}
+
+/**
+ * @tc.name: ReadUdsDataTest001
+ * @tc.desc: ReadUdsData fails on invalid fd and empty socket, and on readable
+ *           sockets returns the payload and echoes the length back to the peer
+ * @tc.precon: NA
+ * @tc.step: 1. Call ReadUdsData with sockFd -1 and expect false
+ *           2. Bind a nonblocking socketpair without data and expect false
+ *           3. Write 4 bytes to the peer, call ReadUdsData and expect true
+ *           4. Read the echoed 4-byte length from the peer
+ * @tc.expect: false/false for the error paths; true with length 4 and echoed value 4
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, ReadUdsDataTest001, TestSize.Level1)
+{
+    RMRestResponseListener handler;
+    auto receiver = std::make_shared<ResponseMessageReceiver>(&handler, -1);
+    char buffer[ARRAY_LEN];
+    int32_t length = 0;
+    EXPECT_FALSE(receiver->ReadUdsData(buffer, ARRAY_LEN, length));
+    int fd[2];
+    ASSERT_GE(socketpair(AF_UNIX, SOCK_STREAM, 0, fd), 0);
+    EXPECT_GE(fcntl(fd[0], F_SETFL, O_NONBLOCK), 0);
+    receiver->sockFd_ = fd[0];
+    EXPECT_FALSE(receiver->ReadUdsData(buffer, ARRAY_LEN, length));
+    ASSERT_EQ(write(fd[1], "abcd", 4), 4);
+    EXPECT_TRUE(receiver->ReadUdsData(buffer, ARRAY_LEN, length));
+    EXPECT_EQ(length, 4);
+    uint32_t lenBack = 0;
+    ASSERT_EQ(read(fd[1], &lenBack, sizeof(lenBack)), 4);
+    EXPECT_EQ(lenBack, 4u);
+    receiver->sockFd_ = -1;
+    EXPECT_EQ(close(fd[0]), 0);
+    EXPECT_EQ(close(fd[1]), 0);
+}
+
+/**
+ * @tc.name: HandResponseDataTest001
+ * @tc.desc: HandResponseData forwards a well-formed response body to the handler
+ *           and keeps the handler idle when the body is truncated
+ * @tc.precon: NA
+ * @tc.step: 1. Build a valid response body of tid/version/statusCode/reason/headers
+ *           2. Call HandResponseData and expect one OnResponseReceive callback
+ *           3. Call HandResponseData with a 1-byte body
+ * @tc.expect: First call triggers the handler once; the truncated call triggers nothing
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, HandResponseDataTest001, TestSize.Level1)
+{
+    RMRecordHandler handler;
+    ResponseMessageReceiver receiver(&handler, -1);
+    int32_t tid = 123;
+    string version = "version";
+    int32_t statusCode = 456;
+    string reason = "reason";
+    string headers = "header:aaa,bbb,ccc\n";
+    char buf[ARRAY_LEN];
+    int pos = 0;
+    EXPECT_EQ(memcpy_s(buf + pos, ARRAY_LEN - pos, &tid, sizeof(tid)), 0);
+    pos += sizeof(tid);
+    EXPECT_EQ(memcpy_s(buf + pos, ARRAY_LEN - pos, version.c_str(), version.size() + 1), 0);
+    pos += (version.size() + 1);
+    EXPECT_EQ(memcpy_s(buf + pos, ARRAY_LEN - pos, &statusCode, sizeof(statusCode)), 0);
+    pos += sizeof(statusCode);
+    EXPECT_EQ(memcpy_s(buf + pos, ARRAY_LEN - pos, reason.c_str(), reason.size() + 1), 0);
+    pos += (reason.size() + 1);
+    EXPECT_EQ(memcpy_s(buf + pos, ARRAY_LEN - pos, headers.c_str(), headers.size() + 1), 0);
+    pos += (headers.size() + 1);
+    char *parcel = buf;
+    int32_t size = pos;
+    receiver.HandResponseData(parcel, size);
+    EXPECT_EQ(handler.responseCount_, 1);
+    char bad[1] = { 0 };
+    char *badParcel = bad;
+    int32_t badSize = 1;
+    receiver.HandResponseData(badParcel, badSize);
+    EXPECT_EQ(handler.responseCount_, 1);
+}
+
+/**
+ * @tc.name: HandNotifyDataTest001
+ * @tc.desc: HandNotifyData forwards a well-formed notify body to the handler and
+ *           keeps the handler idle when the body is truncated
+ * @tc.precon: NA
+ * @tc.step: 1. Build a valid notify body covering progress, extras, action and task states
+ *           2. Call HandNotifyData and expect one OnNotifyDataReceive callback
+ *           3. Call HandNotifyData with a 2-byte body
+ * @tc.expect: First call triggers the handler once; the truncated call triggers nothing
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, HandNotifyDataTest001, TestSize.Level1)
+{
+    RMRecordHandler handler;
+    ResponseMessageReceiver receiver(&handler, -1);
+    char buf[ARRAY_LEN];
+    int32_t size = BuildNotifyBody(buf);
+    EXPECT_GT(size, 0);
+    char *parcel = buf;
+    receiver.HandNotifyData(parcel, size);
+    EXPECT_EQ(handler.notifyCount_, 1);
+    char bad[2] = { 0 };
+    char *badParcel = bad;
+    int32_t badSize = 2;
+    receiver.HandNotifyData(badParcel, badSize);
+    EXPECT_EQ(handler.notifyCount_, 1);
+}
+
+/**
+ * @tc.name: HandFaultsDataTest001
+ * @tc.desc: HandFaultsData parses tid/type/reason bodies and fails at each field
+ *           when the body is truncated
+ * @tc.precon: NA
+ * @tc.step: 1. Build a 12-byte faults body and call HandFaultsData
+ *           2. Retry with 3/6/10-byte truncations
+ * @tc.expect: The valid body triggers OnFaultsReceive once; truncations trigger nothing
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, HandFaultsDataTest001, TestSize.Level1)
+{
+    RMRecordHandler handler;
+    ResponseMessageReceiver receiver(&handler, -1);
+    int32_t tid = 7;
+    uint32_t type = static_cast<uint32_t>(SubscribeType::COMPLETED);
+    uint32_t reasonValue = 0x30;
+    char buf[INT32_SIZE * 3];
+    int pos = 0;
+    EXPECT_EQ(memcpy_s(buf + pos, sizeof(buf) - pos, &tid, sizeof(tid)), 0);
+    pos += sizeof(tid);
+    EXPECT_EQ(memcpy_s(buf + pos, sizeof(buf) - pos, &type, sizeof(type)), 0);
+    pos += sizeof(type);
+    EXPECT_EQ(memcpy_s(buf + pos, sizeof(buf) - pos, &reasonValue, sizeof(reasonValue)), 0);
+    pos += sizeof(reasonValue);
+    char *parcel = buf;
+    int32_t size = pos;
+    receiver.HandFaultsData(parcel, size);
+    EXPECT_EQ(handler.faultsCount_, 1);
+    int32_t badSizes[] = { 3, 6, 10 };
+    for (int32_t badSize : badSizes) {
+        char *badParcel = buf;
+        int32_t workSize = badSize;
+        receiver.HandFaultsData(badParcel, workSize);
+        EXPECT_EQ(handler.faultsCount_, 1);
+    }
+}
+
+/**
+ * @tc.name: HandWaitDataTest001
+ * @tc.desc: HandWaitData parses taskId/reason bodies and fails when either field
+ *           is truncated
+ * @tc.precon: NA
+ * @tc.step: 1. Build an 8-byte wait body and call HandWaitData
+ *           2. Retry with 3-byte and 7-byte truncations
+ * @tc.expect: The valid body triggers OnWaitReceive once; truncations trigger nothing
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, HandWaitDataTest001, TestSize.Level1)
+{
+    RMRecordHandler handler;
+    ResponseMessageReceiver receiver(&handler, -1);
+    int32_t taskId = 5;
+    uint32_t reasonValue = static_cast<uint32_t>(WaitingReason::TaskQueueFull);
+    char buf[INT32_SIZE * 2];
+    int pos = 0;
+    EXPECT_EQ(memcpy_s(buf + pos, sizeof(buf) - pos, &taskId, sizeof(taskId)), 0);
+    pos += sizeof(taskId);
+    EXPECT_EQ(memcpy_s(buf + pos, sizeof(buf) - pos, &reasonValue, sizeof(reasonValue)), 0);
+    pos += sizeof(reasonValue);
+    char *parcel = buf;
+    int32_t size = pos;
+    receiver.HandWaitData(parcel, size);
+    EXPECT_EQ(handler.waitCount_, 1);
+    int32_t badSizes[] = { 3, 7 };
+    for (int32_t badSize : badSizes) {
+        char *badParcel = buf;
+        int32_t workSize = badSize;
+        receiver.HandWaitData(badParcel, workSize);
+        EXPECT_EQ(handler.waitCount_, 1);
+    }
+}
+
+/**
+ * @tc.name: OnReadableDispatchTest001
+ * @tc.desc: OnReadable parses real protocol frames from a socketpair: bad magic
+ *           bumps the id without dispatching, each known msgType reaches its
+ *           handler once, unknown types are ignored, and truncated bodies fail
+ * @tc.precon: NA
+ * @tc.step: 1. Bind the receiver to one end of a socketpair
+ *           2. Write a bad-magic frame and expect no dispatch
+ *           3. Write HTTP_RESPONSE/NOTIFY_DATA/FAULTS/WAIT frames with valid bodies
+ *           4. Write an unknown msgType and a truncated HTTP_RESPONSE body
+ * @tc.expect: Counters rise exactly for the four known types; id increments per call
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, OnReadableDispatchTest001, TestSize.Level1)
+{
+    RMRecordHandler handler;
+    int fd[2];
+    ASSERT_GE(socketpair(AF_UNIX, SOCK_STREAM, 0, fd), 0);
+    auto receiver = std::make_shared<ResponseMessageReceiver>(&handler, fd[0]);
+    char badMagic[INT32_SIZE] = { 0 };
+    EXPECT_EQ(write(fd[1], badMagic, sizeof(badMagic)), sizeof(badMagic));
+    receiver->OnReadable(fd[0]);
+    DrainEcho(fd[1]);
+    EXPECT_EQ(receiver->messageId_, 2);
+    EXPECT_EQ(handler.responseCount_ + handler.notifyCount_ + handler.faultsCount_ + handler.waitCount_, 0);
+    char respBody[ARRAY_LEN];
+    int32_t respPos = BuildResponseBody(respBody);
+    SendFrame(fd[1], MessageType::HTTP_RESPONSE, receiver->messageId_, respBody, respPos);
+    receiver->OnReadable(fd[0]);
+    DrainEcho(fd[1]);
+    EXPECT_EQ(handler.responseCount_, 1);
+    EXPECT_EQ(receiver->messageId_, 3);
+    char faultsBody[FAULTS_BODY_SIZE];
+    int32_t faultsPos = BuildFaultsBody(faultsBody, 123);
+    SendFrame(fd[1], MessageType::FAULTS, receiver->messageId_, faultsBody, faultsPos);
+    receiver->OnReadable(fd[0]);
+    DrainEcho(fd[1]);
+    EXPECT_EQ(handler.faultsCount_, 1);
+    EXPECT_EQ(receiver->messageId_, 4);
+    char waitBody[WAIT_BODY_SIZE];
+    int32_t waitPos = BuildWaitBody(waitBody, 123);
+    SendFrame(fd[1], MessageType::WAIT, receiver->messageId_, waitBody, waitPos);
+    receiver->OnReadable(fd[0]);
+    DrainEcho(fd[1]);
+    EXPECT_EQ(handler.waitCount_, 1);
+    EXPECT_EQ(receiver->messageId_, 5);
+    SendFrame(fd[1], static_cast<int16_t>(99), receiver->messageId_, nullptr, 0);
+    receiver->OnReadable(fd[0]);
+    DrainEcho(fd[1]);
+    EXPECT_EQ(handler.responseCount_, 1);
+    EXPECT_EQ(handler.notifyCount_, 0);
+    EXPECT_EQ(receiver->messageId_, 6);
+    SendFrame(fd[1], MessageType::HTTP_RESPONSE, receiver->messageId_, "x", 1);
+    receiver->OnReadable(fd[0]);
+    DrainEcho(fd[1]);
+    EXPECT_EQ(handler.responseCount_, 1);
+    EXPECT_EQ(receiver->messageId_, 7);
+    receiver->sockFd_ = -1;
+    EXPECT_EQ(close(fd[0]), 0);
+    EXPECT_EQ(close(fd[1]), 0);
+}
+
+/**
+ * @tc.name: BeginReceiveTest001
+ * @tc.desc: BeginReceive installs the fd listener for both invalid and valid fds
+ *           without crashing; Shutdown closes a bound socket so the peer sees EOF
+ * @tc.precon: NA
+ * @tc.step: 1. Call BeginReceive on a receiver with fd -1 and expect the state unchanged
+ *           2. Bind a second receiver to a socketpair and call BeginReceive
+ *           3. Call Shutdown and verify sockFd resets to -1 and the peer reads EOF
+ * @tc.expect: sockFd_ is -1 for the invalid receiver; after Shutdown sockFd_ is -1 and peer reads 0
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(ResponseMessageReceiverTest, BeginReceiveTest001, TestSize.Level1)
+{
+    RMRestResponseListener handler;
+    auto receiver = std::make_shared<ResponseMessageReceiver>(&handler, -1);
+    receiver->BeginReceive();
+    EXPECT_EQ(receiver->sockFd_, -1);
+    int fd[2];
+    ASSERT_GE(socketpair(AF_UNIX, SOCK_STREAM, 0, fd), 0);
+    auto boundReceiver = std::make_shared<ResponseMessageReceiver>(&handler, fd[0]);
+    boundReceiver->BeginReceive();
+    EXPECT_EQ(boundReceiver->sockFd_, fd[0]);
+    boundReceiver->Shutdown();
+    EXPECT_EQ(boundReceiver->sockFd_, -1);
+    char drain[1] = { 0 };
+    EXPECT_EQ(read(fd[1], drain, sizeof(drain)), 0);
+    EXPECT_EQ(close(fd[1]), 0);
+    boundReceiver->OnShutdown(0);
+    boundReceiver->OnException(0);
+    EXPECT_EQ(boundReceiver->sockFd_, -1);
 }

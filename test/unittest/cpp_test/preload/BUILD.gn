@@ -22,6 +22,8 @@ ohos_unittest("preload_test") {
     "../../../../interfaces/inner_kits/predownload/include",
     "../../../../common/include",
     "../../../common/utf8_utils/include",
+    "../../common/mock_server/include",
+    "../../common/set_permission/include",
   ]
 
   sources = [
