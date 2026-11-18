@@ -73,6 +73,7 @@ ohos_static_library("download_server_cxx") {
     "src/cxx/network.cpp",
     "src/cxx/notification_bar.cpp",
     "src/cxx/request_cert_mgr_adapter.cpp",
+    "src/cxx/request_blob_serialize.cpp",
     "src/cxx/request_utils.cpp",
     "src/cxx/url_policy.cpp",
     "src/cxx/vpn_dns_resolver.cpp",

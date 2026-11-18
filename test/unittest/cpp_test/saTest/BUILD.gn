@@ -29,8 +29,10 @@ ohos_unittest("saTest") {
   sources = [
     "../../../../services/src/cxx/c_string_wrapper.cpp",
     "../../../../services/src/cxx/request_cert_mgr_adapter.cpp",
+    "../../../../services/src/cxx/request_blob_serialize.cpp",
     "../../../../common/utf8_utils/src/utf8_utils.cpp",
     "src/c_string_wrapper_test.cpp",
+    "src/c_request_database_blob_test.cpp",
     "src/request_cert_mgr_adapter_test.cpp",
     "src/utf8_utils_test.cpp",
   ]
