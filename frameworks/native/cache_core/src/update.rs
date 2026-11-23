@@ -136,3 +136,6 @@ impl Updater {
         }
     }
 }
+
+#[cfg(test)]
+include!("../tests/ut/ut_update.rs");

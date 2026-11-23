@@ -30,6 +30,8 @@ ohos_unittest("fwkTest") {
 
   sources = [
     "../../../../common/sys_event/src/sys_event.cpp",
+    "../../../../common/utils/src/cxx/request_utils_application.cpp",
+    "../../../../common/utils/src/cxx/request_utils_wrapper.cpp",
     "../../../../common/utils/src/cxx/request_utils_dataability.cpp",
     "../../../../frameworks/native/request/src/parcel_helper.cpp",
     "../../../../frameworks/native/request/src/request.cpp",
@@ -42,16 +44,21 @@ ohos_unittest("fwkTest") {
     "../../../../frameworks/native/request/src/runcount_notify_stub.cpp",
     "src/parcel_helper_test.cpp",
     "src/request_common_utils_test.cpp",
+    "src/request_listener_test.cpp",
     "src/request_manager_impl_test.cpp",
     "src/request_manager_test.cpp",
     "src/request_service_proxy_test.cpp",
     "src/request_test.cpp",
+    "src/request_utils_application_test.cpp",
     "src/request_utils_dataability_test.cpp",
+    "src/request_utils_wrapper_test.cpp",
     "src/response_message_receiver_test.cpp",
     "src/runcount_notify_stub_test.cpp",
     "src/running_task_count_test.cpp",
     "src/sys_event_test.cpp",
   ]
+
+  deps = [ "../../../../frameworks/native/cache_download:preload_native_rust" ]
 
   external_deps = [
     "ability_base:base",
@@ -60,12 +67,16 @@ ohos_unittest("fwkTest") {
     "ability_runtime:ability_context_native",
     "ability_runtime:ability_manager",
     "ability_runtime:abilitykit_native",
+    "ability_runtime:ani_base_context",
+    "ability_runtime:ani_wantagent_common",
     "ability_runtime:app_context",
     "ability_runtime:app_manager",
     "ability_runtime:data_ability_helper",
     "ability_runtime:wantagent_innerkits",
     "access_token:libaccesstoken_sdk",
     "access_token:libtokenid_sdk",
+    "app_file_service:fileuri_native",
+    "bundle_framework:appexecfwk_core_headers",
     "c_utils:utils",
     "common_event_service:cesfwk_innerkits",
     "curl:curl_shared",
@@ -78,11 +89,14 @@ ohos_unittest("fwkTest") {
     "init:libbegetutil",
     "ipc:ipc_single",
     "netmanager_base:net_conn_manager_if",
+    "netmanager_base:net_security_config_if",
     "openssl:libcrypto_shared",
     "openssl:libssl_shared",
     "relational_store:native_appdatafwk",
     "relational_store:native_dataability",
     "relational_store:native_rdb",
+    "runtime_core:ani",
+    "rust_cxx:cxx_cppdeps",
     "safwk:system_ability_fwk",
     "samgr:samgr_proxy",
   ]

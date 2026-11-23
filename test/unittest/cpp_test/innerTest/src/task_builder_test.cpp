@@ -26,6 +26,9 @@
 #include "request_common.h"
 #include "task_builder.h"
 
+#include "application_context.h"
+#include "context_impl.h"
+
 using namespace testing::ext;
 using namespace OHOS::Request;
 
@@ -1587,4 +1590,378 @@ HWTEST_F(TaskBuilderTest, GetHostnameFromURL002, TestSize.Level1)
     EXPECT_EQ(GetHostnameFromURL("///" + LOCAL_HOST), LOCAL_HOST);
     EXPECT_EQ(GetHostnameFromURL("https://" + LOCAL_HOST + "/"), LOCAL_HOST);
     EXPECT_EQ(GetHostnameFromURL("https://"), "");
+}
+
+namespace {
+// Injects an application context whose bundle info is fully in-process, so
+// TaskBuilder::build can pass checkBundle without any system service. The
+// guard re-attaches a bare ContextImpl on destruction so later cases still
+// observe the null-info contract of checkBundle.
+class BundleContextGuard {
+public:
+    BundleContextGuard()
+    {
+        auto ctx = OHOS::AbilityRuntime::ApplicationContext::GetInstance();
+        EXPECT_NE(ctx, nullptr);
+        if (ctx == nullptr) {
+            return;
+        }
+        ctx->AttachContextImpl(std::make_shared<OHOS::AbilityRuntime::ContextImpl>());
+        auto info = std::make_shared<OHOS::AppExecFwk::ApplicationInfo>();
+        EXPECT_NE(info, nullptr);
+        info->bundleName = "com.example.itest";
+        ctx->SetApplicationInfo(info);
+    }
+
+    ~BundleContextGuard()
+    {
+        auto ctx = OHOS::AbilityRuntime::ApplicationContext::GetInstance();
+        if (ctx != nullptr) {
+            ctx->AttachContextImpl(std::make_shared<OHOS::AbilityRuntime::ContextImpl>());
+        }
+    }
+};
+} // namespace
+
+/**
+ * @tc.name: BuildValidDownload001
+ * @tc.desc: build() accepts a minimal download config once the bundle check
+ *           can resolve an in-process context, runs the whole check tail and
+ *           normalizes title, saveas and method
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Build a download task with only action and url set
+ *           3. Check the error code and the normalized fields
+ * @tc.expect: build returns E_OK, method defaults to GET, saveas derives
+ *             from the url, title defaults to download and bundleName comes
+ *             from the injected context
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildValidDownload001, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    TaskBuilder builder;
+    builder.setAction(Action::DOWNLOAD).setUrl(LOCAL_URL);
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_EQ(config.method, "GET");
+    EXPECT_EQ(config.saveas, "data.txt");
+    EXPECT_EQ(config.title, "download");
+    EXPECT_EQ(config.bundleName, "com.example.itest");
+    EXPECT_EQ(config.bundleType, static_cast<uint32_t>(OHOS::AppExecFwk::BundleType::APP));
+    EXPECT_TRUE(config.background);
+}
+
+/**
+ * @tc.name: BuildSaveasTrim001
+ * @tc.desc: saveas whitespace is trimmed before the derive checks
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Build a download task with a padded saveas
+ * @tc.expect: build returns E_OK and saveas loses the padding
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildSaveasTrim001, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    TaskBuilder builder;
+    builder.setAction(Action::DOWNLOAD).setUrl(LOCAL_URL).setSaveAs("  file.bin  ");
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_EQ(config.saveas, "file.bin");
+}
+
+/**
+ * @tc.name: BuildSaveasTrailingSlash001
+ * @tc.desc: a saveas that ends with the directory separator fails the check,
+ *           both for a nested name and for the bare separator
+ * @tc.precon: NA
+ * @tc.step: 1. Build a download task with a saveas ending in '/'
+ *           2. Repeat the build with a saveas that is only the separator
+ * @tc.expect: Both builds return E_PARAMETER_CHECK without reaching the
+ *             bundle check
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildSaveasTrailingSlash001, TestSize.Level1)
+{
+    TaskBuilder builder;
+    builder.setAction(Action::DOWNLOAD).setUrl(LOCAL_URL).setSaveAs("dir/");
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_PARAMETER_CHECK);
+
+    TaskBuilder rootBuilder;
+    rootBuilder.setAction(Action::DOWNLOAD).setUrl(LOCAL_URL).setSaveAs("/");
+    auto [rootConfig, rootErr] = rootBuilder.build();
+    EXPECT_EQ(rootErr, ExceptionErrorCode::E_PARAMETER_CHECK);
+}
+
+/**
+ * @tc.name: BuildSaveasDeriveNoName001
+ * @tc.desc: an empty saveas with a url that has no file name fails the
+ *           derive check, and a spaces-only saveas fails the same way after
+ *           the builder trims it to empty
+ * @tc.precon: NA
+ * @tc.step: 1. Build a download task whose url ends with '/'
+ *           2. Repeat the build with a saveas of only spaces
+ * @tc.expect: Both builds return E_PARAMETER_CHECK because the trimmed
+ *             saveas still derives from a url without a file name
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildSaveasDeriveNoName001, TestSize.Level1)
+{
+    TaskBuilder builder;
+    builder.setAction(Action::DOWNLOAD).setUrl("https://" + LOCAL_HOST + "/");
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_PARAMETER_CHECK);
+
+    TaskBuilder blankBuilder;
+    blankBuilder.setAction(Action::DOWNLOAD).setUrl("https://" + LOCAL_HOST + "/").setSaveAs("   ");
+    auto [blankConfig, blankErr] = blankBuilder.build();
+    EXPECT_EQ(blankErr, ExceptionErrorCode::E_PARAMETER_CHECK);
+}
+
+/**
+ * @tc.name: BuildUploadIndexOob001
+ * @tc.desc: an upload index beyond the file count fails the index check
+ * @tc.precon: NA
+ * @tc.step: 1. Build an upload task with one file and index 1
+ * @tc.expect: build returns E_PARAMETER_CHECK
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildUploadIndexOob001, TestSize.Level1)
+{
+    FileSpec file;
+    file.uri = "file://itest/local.bin";
+    TaskBuilder builder;
+    builder.setAction(Action::UPLOAD).setData(std::vector<FileSpec>{ file }).setIndex(1);
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_PARAMETER_CHECK);
+}
+
+/**
+ * @tc.name: BuildUploadMethodPost001
+ * @tc.desc: an upload task normalizes the lower-case post method and keeps
+ *           the first file as the data source
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Build an upload task with one file and method "post"
+ * @tc.expect: build returns E_OK and method becomes POST
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildUploadMethodPost001, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    FileSpec file;
+    file.uri = "file://itest/local.bin";
+    TaskBuilder builder;
+    builder.setAction(Action::UPLOAD).setUrl(LOCAL_URL).setData(std::vector<FileSpec>{ file }).setMethod("post");
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_EQ(config.method, "POST");
+}
+
+/**
+ * @tc.name: BuildMethodDefaultUpload001
+ * @tc.desc: an unrecognized upload method falls back to PUT
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Build an upload task with method "del"
+ * @tc.expect: build returns E_OK and method becomes PUT
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildMethodDefaultUpload001, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    FileSpec file;
+    file.uri = "file://itest/local.bin";
+    TaskBuilder builder;
+    builder.setAction(Action::UPLOAD).setUrl(LOCAL_URL).setData(std::vector<FileSpec>{ file }).setMethod("del");
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_EQ(config.method, "PUT");
+}
+
+/**
+ * @tc.name: BuildMethodDefaultDownload001
+ * @tc.desc: an unrecognized download method falls back to GET and a negative
+ *           begins is clamped by the other-config check
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Build a download task with method "del" and begins -1
+ * @tc.expect: build returns E_OK, method becomes GET and begins is clamped
+ *             to 0
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildMethodDefaultDownload001, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    TaskBuilder builder;
+    builder.setAction(Action::DOWNLOAD).setUrl(LOCAL_URL).setMethod("del").setBegins(-1);
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_EQ(config.method, "GET");
+    EXPECT_EQ(config.begins, 0);
+}
+
+/**
+ * @tc.name: BuildFrontendMode001
+ * @tc.desc: a frontend task keeps the background flag off while a background
+ *           task enables it through the other-config check
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Build a download task with mode FRONTEND
+ * @tc.expect: build returns E_OK and background stays false
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildFrontendMode001, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    TaskBuilder builder;
+    builder.setAction(Action::DOWNLOAD).setUrl(LOCAL_URL).setMode(Mode::FOREGROUND);
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_FALSE(config.background);
+}
+
+/**
+ * @tc.name: BuildHttpDownloadChain001
+ * @tc.desc: a full http download builder chain normalizes method, trims
+ *           saveas, clamps a negative begins and keeps the string/map payloads
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Chain 13 setters on a download builder whose url uses http://
+ *           3. Run build and inspect the returned config
+ * @tc.expect: build returns E_OK, method uppercases to POST, saveas loses its
+ *             padding spaces, begins clamps to zero and payloads survive
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildHttpDownloadChain001, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    TaskBuilder builder;
+    std::map<std::string, std::string> headers = { { "k1", "v1" } };
+    builder.setAction(Action::DOWNLOAD)
+        .setUrl("http://" + LOCAL_HOST + "/data.txt")
+        .setTitle("dl")
+        .setDescription("desc001")
+        .setMode(Mode::FOREGROUND)
+        .setOverwrite(true)
+        .setMethod("post")
+        .setHeaders(headers)
+        .setData(std::string("payload"))
+        .setSaveAs(" /data/test/chain001.txt ")
+        .setNetwork(Network::WIFI)
+        .setMetered(true)
+        .setBegins(-5)
+        .setEnds(99);
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_EQ(config.method, "POST");
+    EXPECT_EQ(config.saveas, "/data/test/chain001.txt");
+    EXPECT_EQ(config.network, Network::WIFI);
+    EXPECT_TRUE(config.metered);
+    EXPECT_EQ(config.begins, 0);
+    EXPECT_EQ(config.ends, 99);
+    EXPECT_EQ(config.data, "payload");
+    EXPECT_EQ(config.headers, headers);
+}
+
+/**
+ * @tc.name: BuildUploadFullChain002
+ * @tc.desc: a full upload builder chain clears saveas, defaults the method to
+ *           PUT and keeps the retry/redirect/proxy/token/priority settings
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Chain 12 setters on an upload builder with a valid proxy and
+ *              token, form and file payloads
+ *           3. Run build and inspect the returned config
+ * @tc.expect: build returns E_OK, saveas becomes empty, method becomes PUT
+ *             and every explicit setting survives into the config
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildUploadFullChain002, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    TaskBuilder builder;
+    FileSpec file = { .name = "up", .uri = "/data/test/up002.bin" };
+    FormItem form = { .name = "field", .value = "val" };
+    std::map<std::string, std::string> extras = { { "e1", "v1" } };
+    builder.setAction(Action::UPLOAD)
+        .setUrl(LOCAL_URL)
+        .setRetry(false)
+        .setRedirect(false)
+        .setProxy("http://127.0.0.1:8080")
+        .setIndex(0)
+        .setGauge(true)
+        .setPrecise(true)
+        .setToken("12345678")
+        .setPriority(3)
+        .setExtras(extras)
+        .setData(std::vector<FormItem>{ form })
+        .setData(std::vector<FileSpec>{ file })
+        .setMinSpeed(MinSpeed());
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_EQ(config.saveas, "");
+    EXPECT_EQ(config.method, "PUT");
+    ASSERT_EQ(config.files.size(), static_cast<size_t>(1));
+    EXPECT_EQ(config.files[0].name, "up");
+    EXPECT_EQ(config.files[0].uri, "/data/test/up002.bin");
+    ASSERT_EQ(config.forms.size(), static_cast<size_t>(1));
+    EXPECT_EQ(config.forms[0].name, "field");
+    EXPECT_EQ(config.forms[0].value, "val");
+    EXPECT_EQ(config.extras, extras);
+    EXPECT_FALSE(config.retry);
+    EXPECT_FALSE(config.redirect);
+    EXPECT_TRUE(config.gauge);
+    EXPECT_TRUE(config.precise);
+    EXPECT_EQ(config.priority, 3u);
+    EXPECT_EQ(config.token, "12345678");
+    EXPECT_EQ(config.proxy, "http://127.0.0.1:8080");
+}
+
+/**
+ * @tc.name: BuildUploadIndexValid003
+ * @tc.desc: an upload builder whose index is inside the file list keeps the
+ *           requested index after build
+ * @tc.precon: NA
+ * @tc.step: 1. Install the bundle context guard
+ *           2. Build an upload task with two files and index 1
+ * @tc.expect: build returns E_OK and config.index stays 1
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(TaskBuilderTest, BuildUploadIndexValid003, TestSize.Level1)
+{
+    BundleContextGuard guard;
+    TaskBuilder builder;
+    FileSpec file0 = { .name = "f0", .uri = "/data/test/up003a.bin" };
+    FileSpec file1 = { .name = "f1", .uri = "/data/test/up003b.bin" };
+    builder.setAction(Action::UPLOAD).setUrl(LOCAL_URL).setData(std::vector<FileSpec>{ file0, file1 }).setIndex(1);
+    auto [config, err] = builder.build();
+    EXPECT_EQ(err, ExceptionErrorCode::E_OK);
+    EXPECT_EQ(config.index, 1u);
 }

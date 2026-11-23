@@ -32,6 +32,7 @@
 #include "gmock/gmock.h"
 #include "log.h"
 #include "request_common.h"
+#include "request_manager.h"
 #include "request_manager_impl.h"
 #include "request_running_task_count.h"
 #include "request_service_proxy.h"
@@ -1286,4 +1287,476 @@ HWTEST_F(RequestManagerImplTest, SubscribeUnsubscribeSATest001, TestSize.Level1)
     mgr->saChangeListener_ = nullptr;
     EXPECT_TRUE(mgr->UnsubscribeSA());
     EXPECT_EQ(mgr->saChangeListener_, nullptr);
+}
+
+namespace {
+// Batch error fed to every mock; it differs from E_SERVICE_ERROR so the
+// proxy loop breaks on the first answer and never reaches the retry arm,
+// which would reload the real service proxy from samgr.
+constexpr ExceptionErrorCode BATCH_ERR = ExceptionErrorCode::E_TASK_NOT_FOUND;
+constexpr int64_t MOCK_SPEED_LIMIT = 1024;
+constexpr Mode MOCK_MODE = Mode::FOREGROUND;
+} // namespace
+
+/**
+ * @tc.name: ImplSetModeBatchErr001
+ * @tc.desc: SetMode forwards the mode through the cached mock proxy and
+ *           returns the proxy answer unchanged; the mock bookkeeping resets
+ *           cleanly afterwards
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering SetMode with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::SetMode with the mock in place
+ *           3. Verify and clear the mock expectations before teardown
+ * @tc.expect: The returned code equals the mock answer and the mock reports
+ *             no unmet expectations
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplSetModeBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, SetMode(testing::_, testing::_)).WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->SetMode("tid_mode", MOCK_MODE), BATCH_ERR);
+    EXPECT_TRUE(testing::Mock::VerifyAndClearExpectations(exceptProxy.GetRefPtr()));
+}
+
+/**
+ * @tc.name: ImplDisableTaskNotificationBatchErr001
+ * @tc.desc: DisableTaskNotification returns the batch error directly when the
+ *           service call fails, leaving the result vector untouched
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering DisableTaskNotification with
+ *              E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::DisableTaskNotification
+ * @tc.expect: The returned code equals the mock answer and the result vector
+ *             stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplDisableTaskNotificationBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, DisableTaskNotification(testing::_, testing::_))
+        .WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_disable" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->DisableTaskNotification(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ImplStartTasksBatchErr001
+ * @tc.desc: StartTasks returns the batch error directly when the service call
+ *           fails, skipping the per-tid result mapping
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering StartTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::StartTasks
+ * @tc.expect: The returned code equals the mock answer and the result vector
+ *             stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplStartTasksBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, StartTasks(testing::_, testing::_)).WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_start" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->StartTasks(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ImplStopTasksBatchErr001
+ * @tc.desc: StopTasks returns the batch error directly when the service call
+ *           fails
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering StopTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::StopTasks
+ * @tc.expect: The returned code equals the mock answer and the result vector
+ *             stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplStopTasksBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, StopTasks(testing::_, testing::_)).WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_stop" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->StopTasks(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ImplResumeTasksBatchErr001
+ * @tc.desc: ResumeTasks returns the batch error directly when the service
+ *           call fails
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering ResumeTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::ResumeTasks
+ * @tc.expect: The returned code equals the mock answer and the result vector
+ *             stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplResumeTasksBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, ResumeTasks(testing::_, testing::_)).WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_resume" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->ResumeTasks(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ImplRemoveTasksBatchErr001
+ * @tc.desc: RemoveTasks returns the batch error directly when the service
+ *           call fails, for both API9 and API10 versions
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering RemoveTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::RemoveTasks with Version::API9 and
+ *              again with Version::API10
+ * @tc.expect: Both calls return the mock answer
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplRemoveTasksBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, RemoveTasks(testing::_, testing::_, testing::_))
+        .WillRepeatedly(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_remove" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->RemoveTasks(tids, Version::API9, rets), BATCH_ERR);
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->RemoveTasks(tids, Version::API10, rets), BATCH_ERR);
+}
+
+/**
+ * @tc.name: ImplPauseTasksBatchErr001
+ * @tc.desc: PauseTasks returns the batch error directly when the service call
+ *           fails
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering PauseTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::PauseTasks
+ * @tc.expect: The returned code equals the mock answer and the result vector
+ *             stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplPauseTasksBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, PauseTasks(testing::_, testing::_, testing::_))
+        .WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_pause" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->PauseTasks(tids, Version::API10, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ImplShowTasksBatchErr001
+ * @tc.desc: ShowTasks returns the batch error directly when the service call
+ *           fails, without filling task infos
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering ShowTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::ShowTasks
+ * @tc.expect: The returned code equals the mock answer and the info vector
+ *             stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplShowTasksBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, ShowTasks(testing::_, testing::_)).WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_show" };
+    std::vector<TaskInfoRet> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->ShowTasks(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ImplTouchTasksBatchErr001
+ * @tc.desc: TouchTasks returns the batch error directly when the service call
+ *           fails, without filling task infos
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering TouchTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::TouchTasks with one tid-token pair
+ * @tc.expect: The returned code equals the mock answer and the info vector
+ *             stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplTouchTasksBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, TouchTasks(testing::_, testing::_)).WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<TaskIdAndToken> tidTokens = { { "tid_touch", "token_touch" } };
+    std::vector<TaskInfoRet> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->TouchTasks(tidTokens, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ImplSetMaxSpeedsBatchErr001
+ * @tc.desc: SetMaxSpeeds returns the batch error directly when the service
+ *           call fails, without filling per-tid results
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering SetMaxSpeeds with
+ *              E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::SetMaxSpeeds with one speed config
+ * @tc.expect: The returned code equals the mock answer and the result vector
+ *             stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplSetMaxSpeedsBatchErr001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, SetMaxSpeeds(testing::_, testing::_)).WillOnce(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<SpeedConfig> speedConfig = { { "tid_speed", MOCK_SPEED_LIMIT } };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->SetMaxSpeeds(speedConfig, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ImplSetMaxSpeedPassthrough001
+ * @tc.desc: SetMaxSpeed forwards the limit through the cached mock proxy
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering SetMaxSpeed with E_TASK_NOT_FOUND
+ *           2. Call RequestManagerImpl::SetMaxSpeed
+ * @tc.expect: The returned code equals the mock answer
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ImplSetMaxSpeedPassthrough001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, SetMaxSpeed(testing::_, testing::_))
+        .WillOnce(testing::Return(static_cast<int32_t>(BATCH_ERR)));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    EXPECT_EQ(RequestManagerImpl::GetInstance()->SetMaxSpeed("tid_speed_one", MOCK_SPEED_LIMIT),
+        static_cast<int32_t>(BATCH_ERR));
+}
+
+/**
+ * @tc.name: ProxyConstructNullRemote001
+ * @tc.desc: constructing a RequestServiceProxy over a null remote object
+ *           succeeds and AsObject reports the same null object back; a
+ *           second instance behaves the same way
+ * @tc.precon: NA
+ * @tc.step: 1. Construct RequestServiceProxy with a null IRemoteObject sptr
+ *           2. Call AsObject on the proxy
+ *           3. Construct a second proxy over the same null remote and call
+ *              AsObject on it
+ * @tc.expect: Both constructions complete and both AsObject calls return
+ *             null
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ProxyConstructNullRemote001, TestSize.Level1)
+{
+    OHOS::sptr<OHOS::IRemoteObject> nullRemote;
+    RequestServiceProxy proxy(nullRemote);
+    EXPECT_EQ(proxy.AsObject(), nullptr);
+
+    RequestServiceProxy secondProxy(nullRemote);
+    EXPECT_EQ(secondProxy.AsObject(), nullptr);
+}
+
+/**
+ * @tc.name: ManagerBatchStartStop001
+ * @tc.desc: the RequestManager thin wrappers for StartTasks and StopTasks
+ *           forward to the impl and report the proxy answer unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering StartTasks and StopTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call RequestManager::StartTasks and RequestManager::StopTasks
+ * @tc.expect: Both wrappers return the mock answer with empty result vectors
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ManagerBatchStartStop001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, StartTasks(testing::_, testing::_)).WillRepeatedly(testing::Return(BATCH_ERR));
+    EXPECT_CALL(*exceptProxy, StopTasks(testing::_, testing::_)).WillRepeatedly(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_mgr_ss" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManager::GetInstance()->StartTasks(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+    EXPECT_EQ(RequestManager::GetInstance()->StopTasks(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ManagerBatchResumePause001
+ * @tc.desc: the RequestManager thin wrappers for ResumeTasks and PauseTasks
+ *           forward to the impl and report the proxy answer unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering ResumeTasks and PauseTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call RequestManager::ResumeTasks and RequestManager::PauseTasks
+ * @tc.expect: Both wrappers return the mock answer with empty result vectors
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ManagerBatchResumePause001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, ResumeTasks(testing::_, testing::_)).WillRepeatedly(testing::Return(BATCH_ERR));
+    EXPECT_CALL(*exceptProxy, PauseTasks(testing::_, testing::_, testing::_))
+        .WillRepeatedly(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_mgr_rp" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManager::GetInstance()->ResumeTasks(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+    EXPECT_EQ(RequestManager::GetInstance()->PauseTasks(tids, Version::API10, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ManagerBatchShowTouch001
+ * @tc.desc: the RequestManager thin wrappers for ShowTasks and TouchTasks
+ *           forward to the impl and report the proxy answer unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering ShowTasks and TouchTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call RequestManager::ShowTasks and RequestManager::TouchTasks
+ * @tc.expect: Both wrappers return the mock answer with empty info vectors
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ManagerBatchShowTouch001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, ShowTasks(testing::_, testing::_)).WillRepeatedly(testing::Return(BATCH_ERR));
+    EXPECT_CALL(*exceptProxy, TouchTasks(testing::_, testing::_)).WillRepeatedly(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_mgr_st" };
+    std::vector<TaskIdAndToken> tidTokens = { { "tid_mgr_touch", "token_mgr" } };
+    std::vector<TaskInfoRet> infos;
+    EXPECT_EQ(RequestManager::GetInstance()->ShowTasks(tids, infos), BATCH_ERR);
+    EXPECT_TRUE(infos.empty());
+    EXPECT_EQ(RequestManager::GetInstance()->TouchTasks(tidTokens, infos), BATCH_ERR);
+    EXPECT_TRUE(infos.empty());
+}
+
+/**
+ * @tc.name: ManagerRemoveSetMode001
+ * @tc.desc: the RequestManager thin wrappers for RemoveTasks and SetMode
+ *           forward to the impl and report the proxy answer unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering RemoveTasks and SetMode with
+ *              E_TASK_NOT_FOUND
+ *           2. Call RequestManager::RemoveTasks for both versions and
+ *              RequestManager::SetMode
+ * @tc.expect: Every wrapper returns the mock answer
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ManagerRemoveSetMode001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, RemoveTasks(testing::_, testing::_, testing::_))
+        .WillRepeatedly(testing::Return(BATCH_ERR));
+    EXPECT_CALL(*exceptProxy, SetMode(testing::_, testing::_)).WillRepeatedly(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_mgr_rm" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManager::GetInstance()->RemoveTasks(tids, Version::API9, rets), BATCH_ERR);
+    EXPECT_EQ(RequestManager::GetInstance()->RemoveTasks(tids, Version::API10, rets), BATCH_ERR);
+    EXPECT_EQ(RequestManager::GetInstance()->SetMode("tid_mgr_mode", MOCK_MODE), BATCH_ERR);
+}
+
+/**
+ * @tc.name: ManagerSpeedFamily001
+ * @tc.desc: the RequestManager thin wrappers for SetMaxSpeeds and SetMaxSpeed
+ *           forward to the impl and report the proxy answer unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering SetMaxSpeeds and SetMaxSpeed with
+ *              the batch error
+ *           2. Call RequestManager::SetMaxSpeeds and RequestManager::SetMaxSpeed
+ * @tc.expect: Both wrappers return the mock answer with empty result vectors
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ManagerSpeedFamily001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, SetMaxSpeeds(testing::_, testing::_)).WillRepeatedly(testing::Return(BATCH_ERR));
+    EXPECT_CALL(*exceptProxy, SetMaxSpeed(testing::_, testing::_))
+        .WillRepeatedly(testing::Return(static_cast<int32_t>(BATCH_ERR)));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<SpeedConfig> speedConfig = { { "tid_mgr_speed", MOCK_SPEED_LIMIT } };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManager::GetInstance()->SetMaxSpeeds(speedConfig, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+    EXPECT_EQ(RequestManager::GetInstance()->SetMaxSpeed("tid_mgr_speed_one", MOCK_SPEED_LIMIT),
+        static_cast<int32_t>(BATCH_ERR));
+}
+
+/**
+ * @tc.name: ManagerDisableCreateTasks001
+ * @tc.desc: the RequestManager thin wrappers for DisableTaskNotification and
+ *           CreateTasks forward to the impl and return the batch error
+ *           without contacting the service a second time
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering DisableTaskNotification and
+ *              CreateTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManager::DisableTaskNotification and
+ *              RequestManager::CreateTasks
+ * @tc.expect: Both wrappers return the mock answer with empty result vectors
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestManagerImplTest, ManagerDisableCreateTasks001, TestSize.Level1)
+{
+    exceptProxy = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*exceptProxy, DisableTaskNotification(testing::_, testing::_))
+        .WillRepeatedly(testing::Return(BATCH_ERR));
+    EXPECT_CALL(*exceptProxy, CreateTasks(testing::_, testing::_)).WillRepeatedly(testing::Return(BATCH_ERR));
+    RequestManagerImpl::GetInstance()->requestServiceProxy_ = exceptProxy;
+    std::vector<std::string> tids = { "tid_mgr_dis" };
+    std::vector<ExceptionErrorCode> rets;
+    EXPECT_EQ(RequestManager::GetInstance()->DisableTaskNotification(tids, rets), BATCH_ERR);
+    EXPECT_TRUE(rets.empty());
+    std::vector<Config> configs(1);
+    std::vector<TaskRet> taskRets;
+    EXPECT_EQ(RequestManager::GetInstance()->CreateTasks(configs, taskRets), BATCH_ERR);
+    EXPECT_TRUE(taskRets.empty());
 }

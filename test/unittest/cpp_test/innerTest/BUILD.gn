@@ -41,6 +41,7 @@ ohos_unittest("innerTest") {
     "../../../../frameworks/native/request_action/src/request_action.cpp",
     "../../../../frameworks/native/request_action/src/task_builder.cpp",
     "src/path_control_test.cpp",
+    "src/parcel_helper_test.cpp",
     "src/request_action_test.cpp",
     "src/task_builder_test.cpp",
   ]
@@ -68,6 +69,7 @@ ohos_unittest("innerTest") {
     "distributed_notification_service:ans_innerkits",
     "eventhandler:libeventhandler",
     "ffrt:libffrt",
+    "googletest:gmock_main",
     "hilog:libhilog",
     "hisysevent:libhisysevent",
     "icu:shared_icuuc",

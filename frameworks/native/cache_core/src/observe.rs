@@ -83,3 +83,8 @@ pub fn start_history_dir_observe(curr: PathBuf, history: Arc<HistoryDir>) {
         }
     });
 }
+
+#[cfg(test)]
+mod ut_observe {
+    include!("../tests/ut/ut_observe.rs");
+}

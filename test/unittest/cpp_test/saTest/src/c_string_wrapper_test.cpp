@@ -109,3 +109,33 @@ HWTEST_F(StringWrapperTest, WrapperCStringTest_002, TestSize.Level1)
     EXPECT_EQ(single.cStr[0], 'A');
     DeleteChar(single.cStr);
 }
+
+/**
+ * @tc.name: DeleteCharNullTest_001
+ * @tc.desc: DeleteChar accepts a null pointer as a no-op and frees a live
+ *           wrapper allocation, the null and live branches of the internal
+ *           delete[] must both behave
+ * @tc.precon: NA
+ * @tc.step: 1. Call DeleteChar with a null pointer as a no-op
+ *           2. Wrap a live heap string with WrapperCString
+ *           3. Check the wrapper length and content
+ *           4. Call DeleteChar on the live pointer
+ * @tc.expect: The null call completes without crashing, the wrapper holds a
+ *             single 'A' and the live delete completes (the build disables
+ *             exceptions, so a bad free aborts the test process and fails
+ *             the case)
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(StringWrapperTest, DeleteCharNullTest_001, TestSize.Level1)
+{
+    char *nullPtr = nullptr;
+    DeleteChar(nullPtr);
+
+    CStringWrapper alive = WrapperCString(std::string("A"));
+    ASSERT_EQ(alive.len, 1u);
+    ASSERT_NE(alive.cStr, nullptr);
+    EXPECT_EQ(alive.cStr[0], 'A');
+    DeleteChar(alive.cStr);
+}
