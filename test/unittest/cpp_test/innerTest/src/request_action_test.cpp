@@ -16,6 +16,7 @@
 #include <__chrono/duration.h>
 #include <sys/stat.h>
 
+#include <climits>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -33,7 +34,11 @@
 #define private public
 #define protected public
 
+#include "request_manager_impl.h"
+
 #include <gtest/gtest.h>
+
+#include "gmock/gmock.h"
 
 #include "accesstoken_kit.h"
 #include "log.h"
@@ -2691,4 +2696,1081 @@ HWTEST_F(RequestActionTest, CreateInnerTest034, TestSize.Level1)
     std::string tid;
     auto res = RequestAction::ClearTaskTemp(tid);
     EXPECT_EQ(res, false);
+}
+
+class MockRequestServiceInterface : public RequestServiceInterface {
+public:
+    MOCK_METHOD(ExceptionErrorCode, StartTasks,
+        (const std::vector<std::string> &tids, std::vector<ExceptionErrorCode> &rets), (override));
+    MOCK_METHOD(ExceptionErrorCode, StopTasks,
+        (const std::vector<std::string> &tids, std::vector<ExceptionErrorCode> &rets), (override));
+    MOCK_METHOD(ExceptionErrorCode, ResumeTasks,
+        (const std::vector<std::string> &tids, std::vector<ExceptionErrorCode> &rets), (override));
+    MOCK_METHOD(ExceptionErrorCode, RemoveTasks,
+        (const std::vector<std::string> &tids, const Version version, std::vector<ExceptionErrorCode> &rets),
+        (override));
+    MOCK_METHOD(ExceptionErrorCode, PauseTasks,
+        (const std::vector<std::string> &tids, const Version version, std::vector<ExceptionErrorCode> &rets),
+        (override));
+    MOCK_METHOD(ExceptionErrorCode, QueryTasks,
+        (const std::vector<std::string> &tids, (std::vector<TaskInfoRet> & rets)), (override));
+    MOCK_METHOD(ExceptionErrorCode, ShowTasks,
+        (const std::vector<std::string> &tids, (std::vector<TaskInfoRet> & rets)), (override));
+    MOCK_METHOD(ExceptionErrorCode, TouchTasks,
+        ((const std::vector<TaskIdAndToken> &tidTokens), (std::vector<TaskInfoRet> & rets)), (override));
+
+    MOCK_METHOD(ExceptionErrorCode, SetMode, (const std::string &tid, const Mode mode), (override));
+    MOCK_METHOD(int32_t, Create, (const Config &config, std::string &taskId), (override));
+    MOCK_METHOD(int32_t, GetTask, (const std::string &tid, const std::string &token, Config &config), (override));
+    MOCK_METHOD(int32_t, Start, (const std::string &tid), (override));
+    MOCK_METHOD(int32_t, Pause, (const std::string &tid, const Version version), (override));
+    MOCK_METHOD(int32_t, QueryMimeType, (const std::string &tid, std::string &mimeType), (override));
+    MOCK_METHOD(int32_t, Remove, (const std::string &tid, const Version version), (override));
+    MOCK_METHOD(int32_t, Resume, (const std::string &tid), (override));
+    MOCK_METHOD(int32_t, Stop, (const std::string &tid), (override));
+    MOCK_METHOD(int32_t, Query, (const std::string &tid, TaskInfo &info), (override));
+    MOCK_METHOD(int32_t, Touch, (const std::string &tid, const std::string &token, TaskInfo &info), (override));
+    MOCK_METHOD(int32_t, Search, (const Filter &filter, std::vector<std::string> &tids), (override));
+    MOCK_METHOD(int32_t, Show, (const std::string &tid, TaskInfo &info), (override));
+
+    MOCK_METHOD(int32_t, OpenChannel, (int32_t & sockFd), (override));
+    MOCK_METHOD(int32_t, Subscribe, (const std::string &taskId), (override));
+    MOCK_METHOD(int32_t, Unsubscribe, (const std::string &taskId), (override));
+    MOCK_METHOD(int32_t, SubRunCount, (const OHOS::sptr<NotifyInterface> &listener), (override));
+    MOCK_METHOD(int32_t, UnsubRunCount, (), (override));
+    MOCK_METHOD(OHOS::sptr<OHOS::IRemoteObject>, AsObject, (), (override));
+    MOCK_METHOD(int32_t, CreateGroup, (std::string & gid, const bool gauge, Notification &info), (override));
+    MOCK_METHOD(int32_t, AttachGroup, (const std::string &gid, const std::vector<std::string> &tid), (override));
+    MOCK_METHOD(int32_t, DeleteGroup, (const std::string &gid), (override));
+    MOCK_METHOD(int32_t, SetMaxSpeed, (const std::string &tid, const int64_t maxSpeed), (override));
+    MOCK_METHOD(ExceptionErrorCode, SetMaxSpeeds,
+        (const std::vector<SpeedConfig> &speedConfig, std::vector<ExceptionErrorCode> &rets), (override));
+    MOCK_METHOD(ExceptionErrorCode, DisableTaskNotification,
+        (const std::vector<std::string> &tids, std::vector<ExceptionErrorCode> &rets));
+    MOCK_METHOD(ExceptionErrorCode, CreateTasks, (const std::vector<Config> &configs, std::vector<TaskRet> &rets));
+};
+
+namespace {
+// Speed limit fed to SetMaxSpeeds; the value itself is irrelevant because the
+// batch call fails at the proxy boundary before any semantic check.
+constexpr int64_t MOCK_MAX_SPEED = 1024;
+
+// Swaps the cached service proxy for an in-process mock and always restores
+// the previous value on destruction, so the tested path never reaches the
+// real download_server instance.
+class ProxySwapGuard {
+public:
+    explicit ProxySwapGuard(const OHOS::sptr<RequestServiceInterface> &mock)
+    {
+        saved_ = RequestManagerImpl::GetInstance()->requestServiceProxy_;
+        RequestManagerImpl::GetInstance()->requestServiceProxy_ = mock;
+    }
+
+    ~ProxySwapGuard()
+    {
+        RequestManagerImpl::GetInstance()->requestServiceProxy_ = saved_;
+    }
+
+    ProxySwapGuard(const ProxySwapGuard &) = delete;
+    ProxySwapGuard &operator=(const ProxySwapGuard &) = delete;
+
+private:
+    OHOS::sptr<RequestServiceInterface> saved_;
+};
+} // namespace
+
+/**
+ * @tc.name: StartTasksEarlyExit001
+ * @tc.desc: StartTasks returns the batch error directly when the service
+ *           call fails, skipping the per-tid result mapping
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that answers StartTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call StartTasks with the mock cached in place
+ *           3. Restore the proxy and check the result
+ * @tc.expect: StartTasks returns E_TASK_NOT_FOUND and leaves the result map
+ *             empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, StartTasksEarlyExit001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, StartTasks(testing::_, testing::_))
+        .WillOnce(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::vector<std::string> tids = { "tid_mock_start" };
+    std::unordered_map<std::string, ExceptionErrorCode> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->StartTasks(tids, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_TASK_NOT_FOUND);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: StopTasksEarlyExit001
+ * @tc.desc: StopTasks returns the batch error directly when the service
+ *           call fails
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that answers StopTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call StopTasks with the mock cached in place
+ * @tc.expect: StopTasks returns E_TASK_NOT_FOUND and leaves the result map
+ *             empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, StopTasksEarlyExit001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, StopTasks(testing::_, testing::_))
+        .WillOnce(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::vector<std::string> tids = { "tid_mock_stop" };
+    std::unordered_map<std::string, ExceptionErrorCode> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->StopTasks(tids, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_TASK_NOT_FOUND);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ResumeTasksEarlyExit001
+ * @tc.desc: ResumeTasks returns the batch error directly when the service
+ *           call fails
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that answers ResumeTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call ResumeTasks with the mock cached in place
+ * @tc.expect: ResumeTasks returns E_TASK_NOT_FOUND and leaves the result
+ *             map empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ResumeTasksEarlyExit001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, ResumeTasks(testing::_, testing::_))
+        .WillOnce(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::vector<std::string> tids = { "tid_mock_resume" };
+    std::unordered_map<std::string, ExceptionErrorCode> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->ResumeTasks(tids, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_TASK_NOT_FOUND);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: PauseTasksEarlyExit001
+ * @tc.desc: PauseTasks returns the batch error directly when the service
+ *           call fails
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that answers PauseTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call PauseTasks with the mock cached in place
+ * @tc.expect: PauseTasks returns E_TASK_NOT_FOUND and leaves the result map
+ *             empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, PauseTasksEarlyExit001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, PauseTasks(testing::_, testing::_, testing::_))
+        .WillOnce(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::vector<std::string> tids = { "tid_mock_pause" };
+    std::unordered_map<std::string, ExceptionErrorCode> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->PauseTasks(tids, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_TASK_NOT_FOUND);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: ShowTasksEarlyExit001
+ * @tc.desc: ShowTasks returns the batch error directly when the service
+ *           call fails, without filling task infos
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that answers ShowTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call ShowTasks with the mock cached in place
+ * @tc.expect: ShowTasks returns E_TASK_NOT_FOUND and leaves the info map
+ *             empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ShowTasksEarlyExit001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, ShowTasks(testing::_, testing::_))
+        .WillOnce(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::vector<std::string> tids = { "tid_mock_show" };
+    std::unordered_map<std::string, TaskInfoRet> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->ShowTasks(tids, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_TASK_NOT_FOUND);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: TouchTasksEarlyExit001
+ * @tc.desc: TouchTasks returns the batch error directly when the service
+ *           call fails, without filling task infos
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that answers TouchTasks with
+ *              E_TASK_NOT_FOUND
+ *           2. Call TouchTasks with one tid-token pair and the mock cached
+ *              in place
+ * @tc.expect: TouchTasks returns E_TASK_NOT_FOUND and leaves the info map
+ *             empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, TouchTasksEarlyExit001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, TouchTasks(testing::_, testing::_))
+        .WillOnce(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::vector<TaskIdAndToken> tidTokens = { { "tid_mock_touch", "token_mock_touch" } };
+    std::unordered_map<std::string, TaskInfoRet> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->TouchTasks(tidTokens, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_TASK_NOT_FOUND);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: SetMaxSpeedsEarlyExit001
+ * @tc.desc: SetMaxSpeeds returns the batch error directly when the service
+ *           call fails, without filling per-tid results
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that answers SetMaxSpeeds with
+ *              E_TASK_NOT_FOUND
+ *           2. Call SetMaxSpeeds with one speed config and the mock cached
+ *              in place
+ * @tc.expect: SetMaxSpeeds returns E_TASK_NOT_FOUND and leaves the result
+ *             map empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, SetMaxSpeedsEarlyExit001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, SetMaxSpeeds(testing::_, testing::_))
+        .WillOnce(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::vector<SpeedConfig> speedConfig = { { "tid_mock_speed", MOCK_MAX_SPEED } };
+    std::unordered_map<std::string, ExceptionErrorCode> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->SetMaxSpeeds(speedConfig, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_TASK_NOT_FOUND);
+    EXPECT_TRUE(rets.empty());
+}
+
+namespace {
+// Minimal counting listeners for the registry-level pass-through cases.
+class StubResponseListener : public IResponseListener {
+public:
+    void OnResponseReceive(const std::shared_ptr<Response> &response) override {}
+};
+
+class StubNotifyListener : public INotifyDataListener {
+public:
+    void OnNotifyDataReceive(const std::shared_ptr<NotifyData> &notifyData) override {}
+    void OnFaultsReceive(const std::shared_ptr<int32_t> &tid, const std::shared_ptr<SubscribeType> &type,
+        const std::shared_ptr<Reason> &reason) override {}
+    void OnWaitReceive(std::int32_t taskId, WaitingReason reason) override {}
+};
+} // namespace
+
+/**
+ * @tc.name: ManagerQueryPassthrough001
+ * @tc.desc: RequestManager::Query forwards to the service through the cached
+ *           proxy and reports the proxy answer unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering Query with E_TASK_NOT_FOUND
+ *           2. Call RequestManager::GetInstance()->Query
+ * @tc.expect: The returned code equals the mock answer
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerQueryPassthrough001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, Query(testing::_, testing::_))
+        .WillRepeatedly(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    TaskInfo info;
+    int32_t res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestManager::GetInstance()->Query("tid_mgr_query", info);
+    }
+    EXPECT_EQ(res, static_cast<int32_t>(ExceptionErrorCode::E_TASK_NOT_FOUND));
+}
+
+/**
+ * @tc.name: ManagerSearchPassthrough002
+ * @tc.desc: RequestManager::Search forwards the filter and reports the proxy
+ *           answer unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering Search with E_OK
+ *           2. Call RequestManager::GetInstance()->Search with an empty
+ *              bundle filter
+ * @tc.expect: The returned code is E_OK
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerSearchPassthrough002, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, Search(testing::_, testing::_)).WillRepeatedly(testing::Return(E_OK));
+    Filter filter;
+    std::vector<std::string> tids;
+    int32_t res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestManager::GetInstance()->Search(filter, tids);
+    }
+    EXPECT_EQ(res, E_OK);
+}
+
+/**
+ * @tc.name: ManagerQueryMimeTypePassthrough003
+ * @tc.desc: RequestManager::QueryMimeType forwards to the cached proxy
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering QueryMimeType with E_TASK_NOT_FOUND
+ *           2. Call RequestManager::GetInstance()->QueryMimeType
+ * @tc.expect: The returned code equals the mock answer
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerQueryMimeTypePassthrough003, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, QueryMimeType(testing::_, testing::_))
+        .WillRepeatedly(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::string mimeType;
+    int32_t res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestManager::GetInstance()->QueryMimeType("tid_mgr_mime", mimeType);
+    }
+    EXPECT_EQ(res, static_cast<int32_t>(ExceptionErrorCode::E_TASK_NOT_FOUND));
+}
+
+/**
+ * @tc.name: ManagerUnsubscribePassthrough004
+ * @tc.desc: RequestManager::Unsubscribe forwards to the cached proxy
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering Unsubscribe with E_OK
+ *           2. Call RequestManager::GetInstance()->Unsubscribe
+ * @tc.expect: The returned code is E_OK
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerUnsubscribePassthrough004, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, Unsubscribe(testing::_)).WillRepeatedly(testing::Return(E_OK));
+    int32_t res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestManager::GetInstance()->Unsubscribe("tid_mgr_unsub");
+    }
+    EXPECT_EQ(res, E_OK);
+}
+
+/**
+ * @tc.name: ManagerSubscribePassthrough005
+ * @tc.desc: RequestManager::Subscribe reaches the cached proxy even when the
+ *           UDS channel cannot be opened because the mock answers OpenChannel
+ *           with success but no usable fd
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering Subscribe with E_OK and
+ *              OpenChannel with E_OK while leaving the fd untouched
+ *           2. Call RequestManager::GetInstance()->Subscribe
+ * @tc.expect: The returned code is E_OK
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerSubscribePassthrough005, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, Subscribe(testing::_)).WillRepeatedly(testing::Return(E_OK));
+    EXPECT_CALL(*mock, OpenChannel(testing::_)).WillRepeatedly(testing::Return(E_OK));
+    int32_t res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestManager::GetInstance()->Subscribe("tid_mgr_sub");
+    }
+    EXPECT_EQ(res, E_OK);
+}
+
+/**
+ * @tc.name: ManagerRemoveTasksPassthrough006
+ * @tc.desc: RequestManager::RemoveTasks forwards the batch and reports the
+ *           proxy answer unchanged
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering RemoveTasks with E_TASK_NOT_FOUND
+ *           2. Call RequestManager::GetInstance()->RemoveTasks
+ * @tc.expect: The returned code equals the mock answer
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerRemoveTasksPassthrough006, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, RemoveTasks(testing::_, testing::_, testing::_))
+        .WillRepeatedly(testing::Return(ExceptionErrorCode::E_TASK_NOT_FOUND));
+    std::vector<std::string> tids = { "tid_mgr_remove" };
+    std::vector<ExceptionErrorCode> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestManager::GetInstance()->RemoveTasks(tids, Version::API10, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_TASK_NOT_FOUND);
+}
+
+/**
+ * @tc.name: ManagerSetMaxSpeedPassthrough007
+ * @tc.desc: RequestManager::SetMaxSpeed forwards the limit to the cached
+ *           proxy
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering SetMaxSpeed with E_OK
+ *           2. Call RequestManager::GetInstance()->SetMaxSpeed
+ * @tc.expect: The returned code is E_OK
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerSetMaxSpeedPassthrough007, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, SetMaxSpeed(testing::_, testing::_)).WillRepeatedly(testing::Return(E_OK));
+    int32_t res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestManager::GetInstance()->SetMaxSpeed("tid_mgr_speed", MOCK_MAX_SPEED);
+    }
+    EXPECT_EQ(res, E_OK);
+}
+
+/**
+ * @tc.name: ManagerGroupPassthrough008
+ * @tc.desc: group create, attach and delete forward to the cached proxy in
+ *           sequence
+ * @tc.precon: NA
+ * @tc.step: 1. Cache a mock proxy answering CreateGroup, AttachGroup and
+ *              DeleteGroup with E_OK
+ *           2. Call the three RequestManager group interfaces
+ * @tc.expect: All three calls return E_OK
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerGroupPassthrough008, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    EXPECT_CALL(*mock, CreateGroup(testing::_, testing::_, testing::_)).WillRepeatedly(testing::Return(E_OK));
+    EXPECT_CALL(*mock, AttachGroup(testing::_, testing::_)).WillRepeatedly(testing::Return(E_OK));
+    EXPECT_CALL(*mock, DeleteGroup(testing::_)).WillRepeatedly(testing::Return(E_OK));
+    std::string gid = "gid_mgr";
+    Notification info{ .text = "text", .title = "title", .wantAgent = "", .disable = false };
+    int32_t res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestManager::GetInstance()->CreateGroup(gid, true, info);
+        EXPECT_EQ(res, E_OK);
+        res = RequestManager::GetInstance()->AttachGroup(gid, std::vector<std::string>{ "tid_group" });
+        EXPECT_EQ(res, E_OK);
+        res = RequestManager::GetInstance()->DeleteGroup(gid);
+    }
+    EXPECT_EQ(res, E_OK);
+}
+
+/**
+ * @tc.name: ManagerGetNextSeqIncrements009
+ * @tc.desc: successive GetNextSeq calls return consecutive sequence numbers
+ * @tc.precon: NA
+ * @tc.step: 1. Call RequestManager::GetInstance()->GetNextSeq three times
+ * @tc.expect: Each later value is the previous value plus one
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerGetNextSeqIncrements009, TestSize.Level1)
+{
+    int32_t first = RequestManager::GetInstance()->GetNextSeq();
+    int32_t second = RequestManager::GetInstance()->GetNextSeq();
+    int32_t third = RequestManager::GetInstance()->GetNextSeq();
+    EXPECT_EQ(second, first + 1);
+    EXPECT_EQ(third, second + 1);
+}
+
+/**
+ * @tc.name: ManagerListenerRegistry010
+ * @tc.desc: listener registration on a fresh task id succeeds for both
+ *           listener families, RemoveAllListeners clears the registry entry
+ *           and a re-registration still succeeds afterwards
+ * @tc.precon: NA
+ * @tc.step: 1. Call RequestManager::AddListener for a notify listener
+ *           2. Call RequestManager::AddListener for a response listener
+ *           3. Call RequestManager::RemoveAllListeners and repeat step 1
+ * @tc.expect: Every call returns E_OK
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerListenerRegistry010, TestSize.Level1)
+{
+    const std::string taskId = "tid_mgr_listener";
+    auto notifyListener = std::make_shared<StubNotifyListener>();
+    auto responseListener = std::make_shared<StubResponseListener>();
+    EXPECT_EQ(RequestManager::GetInstance()->AddListener(taskId, SubscribeType::PROGRESS, notifyListener), E_OK);
+    EXPECT_EQ(RequestManager::GetInstance()->AddListener(taskId, SubscribeType::RESPONSE, responseListener), E_OK);
+    EXPECT_EQ(RequestManager::GetInstance()->RemoveListener(taskId, SubscribeType::RESPONSE, responseListener), E_OK);
+    RequestManager::GetInstance()->RemoveAllListeners(taskId);
+    EXPECT_EQ(RequestManager::GetInstance()->AddListener(taskId, SubscribeType::PROGRESS, notifyListener), E_OK);
+    EXPECT_EQ(RequestManager::GetInstance()->RemoveListener(taskId, SubscribeType::PROGRESS, notifyListener), E_OK);
+}
+
+/**
+ * @tc.name: ManagerCreateTasksEmptyConfigs011
+ * @tc.desc: CreateTasks with an empty config list succeeds without contacting
+ *           the service
+ * @tc.precon: NA
+ * @tc.step: 1. Call RequestManager::CreateTasks with an empty config vector
+ * @tc.expect: The returned code is E_OK and the result vector stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ManagerCreateTasksEmptyConfigs011, TestSize.Level1)
+{
+    std::vector<Config> configs;
+    std::vector<TaskRet> rets;
+    ExceptionErrorCode res = RequestManager::GetInstance()->CreateTasks(configs, rets);
+    EXPECT_EQ(res, ExceptionErrorCode::E_OK);
+    EXPECT_TRUE(rets.empty());
+}
+
+/**
+ * @tc.name: StartTasksSuccessMapping001
+ * @tc.desc: StartTasks maps each per-tid answer from the service vector into
+ *           the result map when the batch call succeeds
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that fills the answer vector with E_OK
+ *              and returns E_OK
+ *           2. Call StartTasks with the mock cached in place
+ *           3. Restore the proxy and check the result map
+ * @tc.expect: StartTasks returns E_OK and the map carries the per-tid value
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, StartTasksSuccessMapping001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    std::vector<ExceptionErrorCode> answer = { ExceptionErrorCode::E_OK };
+    EXPECT_CALL(*mock, StartTasks(testing::_, testing::_))
+        .WillOnce(testing::DoAll(testing::SetArgReferee<1>(answer), testing::Return(ExceptionErrorCode::E_OK)));
+    std::vector<std::string> tids = { "tid_success_start" };
+    std::unordered_map<std::string, ExceptionErrorCode> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->StartTasks(tids, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_OK);
+    ASSERT_EQ(rets.size(), static_cast<size_t>(1));
+    EXPECT_EQ(rets.at("tid_success_start"), ExceptionErrorCode::E_OK);
+}
+
+/**
+ * @tc.name: StopTasksSuccessMapping001
+ * @tc.desc: StopTasks maps each per-tid answer into the result map when the
+ *           batch call succeeds
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that fills the answer vector with
+ *              E_TASK_NOT_FOUND and returns E_OK
+ *           2. Call StopTasks with the mock cached in place
+ * @tc.expect: StopTasks returns E_OK and the map carries the per-tid error
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, StopTasksSuccessMapping001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    std::vector<ExceptionErrorCode> answer = { ExceptionErrorCode::E_TASK_NOT_FOUND };
+    EXPECT_CALL(*mock, StopTasks(testing::_, testing::_))
+        .WillOnce(testing::DoAll(testing::SetArgReferee<1>(answer), testing::Return(ExceptionErrorCode::E_OK)));
+    std::vector<std::string> tids = { "tid_success_stop" };
+    std::unordered_map<std::string, ExceptionErrorCode> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->StopTasks(tids, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_OK);
+    ASSERT_EQ(rets.size(), static_cast<size_t>(1));
+    EXPECT_EQ(rets.at("tid_success_stop"), ExceptionErrorCode::E_TASK_NOT_FOUND);
+}
+
+/**
+ * @tc.name: TouchTasksSuccessMapping001
+ * @tc.desc: TouchTasks maps each per-tid TaskInfoRet into the result map when
+ *           the batch call succeeds
+ * @tc.precon: NA
+ * @tc.step: 1. Prepare a mock proxy that fills the answer vector with one
+ *              TaskInfoRet and returns E_OK
+ *           2. Call TouchTasks with the mock cached in place
+ * @tc.expect: TouchTasks returns E_OK and the map carries the per-tid entry
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, TouchTasksSuccessMapping001, TestSize.Level1)
+{
+    auto mock = OHOS::sptr<MockRequestServiceInterface>(new MockRequestServiceInterface());
+    TaskInfoRet answerEntry;
+    answerEntry.code = ExceptionErrorCode::E_OK;
+    std::vector<TaskInfoRet> answer = { answerEntry };
+    EXPECT_CALL(*mock, TouchTasks(testing::_, testing::_))
+        .WillOnce(testing::DoAll(testing::SetArgReferee<1>(answer), testing::Return(ExceptionErrorCode::E_OK)));
+    std::vector<TaskIdAndToken> tidTokens = { { "tid_success_touch", "token_success_touch" } };
+    std::unordered_map<std::string, TaskInfoRet> rets;
+    ExceptionErrorCode res;
+    {
+        ProxySwapGuard guard(mock);
+        res = RequestAction::GetInstance()->TouchTasks(tidTokens, rets);
+    }
+    EXPECT_EQ(res, ExceptionErrorCode::E_OK);
+    ASSERT_EQ(rets.size(), static_cast<size_t>(1));
+    EXPECT_EQ(rets.at("tid_success_touch").code, ExceptionErrorCode::E_OK);
+}
+
+/**
+ * @tc.name: ActionPathInterceptSucceed001
+ * @tc.desc: InterceptData extracts the tail after the last delimiter for a
+ *           regular path and for a bare extension pattern
+ * @tc.precon: NA
+ * @tc.step: 1. Call InterceptData with "/" and "/data/file.txt"
+ *           2. Call InterceptData with "." and "file.txt"
+ * @tc.expect: Both calls return true and carry the substring after the last
+ *             delimiter
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathInterceptSucceed001, TestSize.Level1)
+{
+    std::string out;
+    auto res = RequestAction::InterceptData("/", "/data/file.txt", out);
+    EXPECT_EQ(res, true);
+    EXPECT_EQ(out, "file.txt");
+    std::string out2;
+    auto res2 = RequestAction::InterceptData(".", "file.txt", out2);
+    EXPECT_EQ(res2, true);
+    EXPECT_EQ(out2, "txt");
+}
+
+/**
+ * @tc.name: ActionPathStandardizeInternal002
+ * @tc.desc: StandardizePath rewrites an internal:// path onto the mocked base
+ *           directory
+ * @tc.precon: NA
+ * @tc.step: 1. Create a mock context whose GetBaseDir returns "/data/app/base"
+ *           2. Call StandardizePath with "internal://aa"
+ * @tc.expect: The call returns true and the path becomes "/data/app/base/aa"
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathStandardizeInternal002, TestSize.Level1)
+{
+    std::shared_ptr<ApplicationContext> context = std::make_shared<ContextTestMock>();
+    Config config;
+    std::string path = "internal://aa";
+    auto res = RequestAction::StandardizePath(context, config, path);
+    EXPECT_EQ(res, true);
+    EXPECT_EQ(path, "/data/app/base/aa");
+}
+
+/**
+ * @tc.name: ActionPathStandardizeDot003
+ * @tc.desc: StandardizePath rewrites a "./" path onto the mocked cache
+ *           directory
+ * @tc.precon: NA
+ * @tc.step: 1. Create a mock context whose GetCacheDir returns "/data/app/cache"
+ *           2. Call StandardizePath with "./aa"
+ * @tc.expect: The call returns true and the path becomes "/data/app/cache/aa"
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathStandardizeDot003, TestSize.Level1)
+{
+    std::shared_ptr<ApplicationContext> context = std::make_shared<ContextTestMock>();
+    Config config;
+    std::string path = "./aa";
+    auto res = RequestAction::StandardizePath(context, config, path);
+    EXPECT_EQ(res, true);
+    EXPECT_EQ(path, "/data/app/cache/aa");
+}
+
+/**
+ * @tc.name: ActionPathStandardizeFile004
+ * @tc.desc: StandardizePath rewrites a file:// path whose bundle matches the
+ *           config by stripping the bundle prefix
+ * @tc.precon: NA
+ * @tc.step: 1. Create a mock context and a config with bundleName
+ *              "com.example.aaa"
+ *           2. Call StandardizePath with "file://com.example.aaa/dir/file"
+ * @tc.expect: The call returns true and the path becomes "/dir/file"
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathStandardizeFile004, TestSize.Level1)
+{
+    std::shared_ptr<ApplicationContext> context = std::make_shared<ContextTestMock>();
+    Config config = { .bundleName = "com.example.aaa" };
+    std::string path = "file://com.example.aaa/dir/file";
+    auto res = RequestAction::StandardizePath(context, config, path);
+    EXPECT_EQ(res, true);
+    EXPECT_EQ(path, "/dir/file");
+}
+
+/**
+ * @tc.name: ActionPathIsPathValidTooLong005
+ * @tc.desc: IsPathValid rejects a directory component longer than PATH_MAX
+ *           before touching the filesystem, and a directory part of exactly
+ *           PATH_MAX characters still fails at realpath
+ * @tc.precon: NA
+ * @tc.step: 1. Build a path whose directory part exceeds PATH_MAX characters
+ *           2. Call IsPathValid with the long path
+ *           3. Repeat with a directory part of exactly PATH_MAX characters
+ * @tc.expect: The oversized path fails the length check and the boundary
+ *             path fails the realpath check, so both calls return false
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathIsPathValidTooLong005, TestSize.Level1)
+{
+    // IsPathValid checks the length of the directory part only, i.e. the
+    // substring before the last '/', so the oversized component must be a
+    // directory segment rather than the file name.
+    std::string filepath = "/" + std::string(PATH_MAX + 1, 'a') + "/f";
+    auto res = RequestAction::IsPathValid(filepath);
+    EXPECT_EQ(res, false);
+
+    // A directory part of exactly PATH_MAX characters passes the length
+    // check; realpath then rejects it because such a component cannot exist.
+    std::string boundaryPath = "/" + std::string(PATH_MAX - 1, 'a') + "/f";
+    EXPECT_EQ(RequestAction::IsPathValid(boundaryPath), false);
+}
+
+/**
+ * @tc.name: ActionPathInternalPrefixed006
+ * @tc.desc: GetInternalPath maps an "internal://cache/" prefixed path onto
+ *           the mocked cache directory and passes validation
+ * @tc.precon: NA
+ * @tc.step: 1. Create a mock context whose GetCacheDir returns "/data"
+ *           2. Call GetInternalPath with "internal://cache/test.txt"
+ * @tc.expect: The call returns true and the path becomes "/data/test.txt"
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathInternalPrefixed006, TestSize.Level1)
+{
+    std::shared_ptr<ApplicationContext> context = std::make_shared<ContextCacheTestMock>();
+    Config config;
+    std::string path = "internal://cache/test.txt";
+    auto res = RequestAction::GetInternalPath(context, config, path);
+    EXPECT_EQ(res, true);
+    EXPECT_EQ(path, "/data/test.txt");
+}
+
+/**
+ * @tc.name: ActionPathSplitEmptySeg007
+ * @tc.desc: StringSplit drops empty segments produced by consecutive or
+ *           trailing delimiters
+ * @tc.precon: NA
+ * @tc.step: 1. Call StringSplit on "/a//b/" with the '/' delimiter
+ * @tc.expect: The output holds exactly the two non-empty segments "a" and "b"
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathSplitEmptySeg007, TestSize.Level1)
+{
+    std::vector<std::string> elems;
+    RequestAction::StringSplit("/a//b/", '/', elems);
+    ASSERT_EQ(elems.size(), static_cast<size_t>(2));
+    EXPECT_EQ(elems[0], "a");
+    EXPECT_EQ(elems[1], "b");
+}
+
+/**
+ * @tc.name: ActionPathVecValue008
+ * @tc.desc: PathVecToNormal pushes regular segments and resolves ".." by
+ *           popping the previous segment, failing only when ".." escapes the
+ *           root
+ * @tc.precon: NA
+ * @tc.step: 1. Call PathVecToNormal with {"a","b","..","c"} into an empty out
+ *           2. Call PathVecToNormal with {"a","..",".."} into an empty out
+ * @tc.expect: The first call returns true with out {"a","c"}; the second
+ *             returns false with out left empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathVecValue008, TestSize.Level1)
+{
+    std::vector<std::string> out;
+    auto res = RequestAction::PathVecToNormal({ "a", "b", "..", "c" }, out);
+    EXPECT_EQ(res, true);
+    ASSERT_EQ(out.size(), static_cast<size_t>(2));
+    EXPECT_EQ(out[0], "a");
+    EXPECT_EQ(out[1], "c");
+    std::vector<std::string> out2;
+    auto res2 = RequestAction::PathVecToNormal({ "a", "..", ".." }, out2);
+    EXPECT_EQ(res2, false);
+    EXPECT_TRUE(out2.empty());
+}
+
+/**
+ * @tc.name: ActionPathWholeValue009
+ * @tc.desc: WholeToNormal rewrites the input path in place to its normalized
+ *           form and reports the consumed segments
+ * @tc.precon: NA
+ * @tc.step: 1. Call WholeToNormal with "/data/../aa" into an empty out
+ * @tc.expect: The call returns true, the path becomes "/aa" and out carries
+ *             the single segment "aa"
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathWholeValue009, TestSize.Level1)
+{
+    std::string path = "/data/../aa";
+    std::vector<std::string> out;
+    auto res = RequestAction::WholeToNormal(path, out);
+    EXPECT_EQ(res, true);
+    EXPECT_EQ(path, "/aa");
+    ASSERT_EQ(out.size(), static_cast<size_t>(1));
+    EXPECT_EQ(out[0], "aa");
+}
+
+/**
+ * @tc.name: ActionPathFileToWholeBundle010
+ * @tc.desc: FileToWhole strips a matching bundle prefix from the path; the
+ *           context argument is not dereferenced
+ * @tc.precon: NA
+ * @tc.step: 1. Create a null context and a config with bundleName
+ *              "com.example.aaa"
+ *           2. Call FileToWhole with "com.example.aaa/dir/file"
+ * @tc.expect: The call returns true and the path becomes "/dir/file"
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathFileToWholeBundle010, TestSize.Level1)
+{
+    std::shared_ptr<ApplicationContext> context;
+    Config config = { .bundleName = "com.example.aaa" };
+    std::string path = "com.example.aaa/dir/file";
+    auto res = RequestAction::FileToWhole(context, config, path);
+    EXPECT_EQ(res, true);
+    EXPECT_EQ(path, "/dir/file");
+}
+
+/**
+ * @tc.name: ActionPathDownloadApi9Abs011
+ * @tc.desc: CheckDownloadFile with API9 and an absolute saveas skips the
+ *           internal:// mapping, creates the file and fails on the ACL map
+ *           because the path is outside the app base dirs
+ * @tc.precon: NA
+ * @tc.step: 1. Create a mock context and an API9 config whose saveas is an
+ *              absolute path under /data/test
+ *           2. Call CheckDownloadFile
+ * @tc.expect: The call returns E_FILE_IO from the AddPathsToMap rejection
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathDownloadApi9Abs011, TestSize.Level1)
+{
+    std::shared_ptr<ApplicationContext> context = std::make_shared<ContextTestMock>();
+    const std::string savePath = "/data/test/action_api9_abs011.txt";
+    std::remove(savePath.c_str());
+    FileSpec file = { .uri = savePath };
+    Config config = { .version = Version::API9, .saveas = savePath, .files = { file } };
+    auto res = RequestAction::CheckDownloadFile(context, config);
+    EXPECT_EQ(res, ExceptionErrorCode::E_FILE_IO);
+    std::remove(savePath.c_str());
+}
+
+/**
+ * @tc.name: ActionPathUploadApi9Dir012
+ * @tc.desc: CheckUploadFileSpec with API9 resolves an internal:// style name
+ *           onto the cache dir and then fails because the resolved path is a
+ *           directory
+ * @tc.precon: NA
+ * @tc.step: 1. Create a mock context whose GetCacheDir returns "/data"
+ *           2. Call CheckUploadFileSpec with the file uri "test" under an
+ *              API9 config
+ * @tc.expect: The call returns E_FILE_PATH
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathUploadApi9Dir012, TestSize.Level1)
+{
+    std::shared_ptr<ApplicationContext> context = std::make_shared<ContextCacheTestMock>();
+    FileSpec file = { .uri = "test" };
+    Config config = { .version = Version::API9, .files = { file } };
+    auto res = RequestAction::CheckUploadFileSpec(context, config, file);
+    EXPECT_EQ(res, ExceptionErrorCode::E_FILE_PATH);
+}
+
+/**
+ * @tc.name: ActionPathBodyFilesNoMultipart013
+ * @tc.desc: CheckUploadBodyFiles without multipart iterates the file list and
+ *           fails when the temp body file is outside the app base dirs, so no
+ *           body file name is recorded
+ * @tc.precon: NA
+ * @tc.step: 1. Call CheckUploadBodyFiles with filepath "/data/test", one file
+ *              entry and multipart disabled
+ * @tc.expect: The call returns E_FILE_IO and config.bodyFileNames stays empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathBodyFilesNoMultipart013, TestSize.Level1)
+{
+    const std::string filepath = "/data/test";
+    FileSpec fileSpec = { .filename = "body013", .name = "file",
+        .uri = "/data/test/body013.txt", .type = "text/plain" };
+    Config config = { .multipart = false, .files = { fileSpec } };
+    auto res = RequestAction::CheckUploadBodyFiles(filepath, config);
+    EXPECT_EQ(res, ExceptionErrorCode::E_FILE_IO);
+    EXPECT_TRUE(config.bodyFileNames.empty());
+}
+
+/**
+ * @tc.name: ActionPathCreateDirsOnFile014
+ * @tc.desc: CreateDirs fails when a deeper level must be created below an
+ *           existing regular file
+ * @tc.precon: NA
+ * @tc.step: 1. Create the regular file "/data/test/CreateDirsFile014"
+ *           2. Call CreateDirs for a sub directory below that file
+ * @tc.expect: The call returns false and the blocker file is removed again
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathCreateDirsOnFile014, TestSize.Level1)
+{
+    const std::string blocker = "/data/test/CreateDirsFile014";
+    std::ofstream file(blocker);
+    file.close();
+    std::vector<std::string> pathDirs = { "data", "test", "CreateDirsFile014", "sub" };
+    auto res = RequestAction::CreateDirs(pathDirs);
+    EXPECT_EQ(res, false);
+    std::error_code ec;
+    std::filesystem::remove_all(blocker, ec);
+}
+
+/**
+ * @tc.name: ActionPathAppBaseDirEmpty015
+ * @tc.desc: GetAppBaseDir fails when the application context exists but its
+ *           base directory is empty
+ * @tc.precon: NA
+ * @tc.step: 1. Detach the ContextImpl from the application context so
+ *              GetBaseDir yields an empty string
+ *           2. Call GetAppBaseDir
+ * @tc.expect: The call returns false and leaves the output empty
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathAppBaseDirEmpty015, TestSize.Level1)
+{
+    // ApplicationContext::GetBaseDir() returns "" when no ContextImpl is
+    // attached, so detaching the impl deterministically drives the empty
+    // base-dir arm without any device state. The impl is re-attached so
+    // later cases still observe the shared singleton contract.
+    auto ctx = ApplicationContext::GetInstance();
+    EXPECT_NE(ctx, nullptr);
+    if (ctx != nullptr) {
+        ctx->AttachContextImpl(nullptr);
+    }
+    std::string baseDir;
+    auto res = RequestAction::GetAppBaseDir(baseDir);
+    EXPECT_EQ(res, false);
+    EXPECT_TRUE(baseDir.empty());
+    if (ctx != nullptr) {
+        ctx->AttachContextImpl(std::make_shared<ContextImpl>());
+    }
+}
+
+/**
+ * @tc.name: ActionPathSetDirsPermEmpty016
+ * @tc.desc: SetDirsPermission over an existing empty folder redirects the
+ *           caller to the consolidated certs directory
+ * @tc.precon: NA
+ * @tc.step: 1. Create the empty directory "/data/test/empty_dir_016"
+ *           2. Call SetDirsPermission with that directory
+ * @tc.expect: The call returns true and the dirs vector is rewritten to the
+ *             certs path
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(RequestActionTest, ActionPathSetDirsPermEmpty016, TestSize.Level1)
+{
+    const std::string emptyDir = "/data/test/empty_dir_016";
+    std::error_code ec;
+    std::filesystem::create_directories(emptyDir, ec);
+    std::vector<std::string> dirs = { emptyDir };
+    auto res = RequestAction::SetDirsPermission(dirs);
+    EXPECT_EQ(res, true);
+    ASSERT_EQ(dirs.size(), static_cast<size_t>(1));
+    EXPECT_EQ(dirs[0], "/data/storage/el2/base/.ohos/.request/.certs");
 }

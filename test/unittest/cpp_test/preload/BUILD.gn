@@ -35,6 +35,7 @@ ohos_unittest("preload_test") {
     "src/progress.cpp",
     "src/success.cpp",
     "src/clear_cache.cpp",
+    "src/api_coverage.cpp",
   ]
 
   deps = [

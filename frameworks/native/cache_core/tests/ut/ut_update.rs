@@ -14,21 +14,17 @@
 #[cfg(test)]
 mod ut_update {
     use super::*;
-    use crate::{CacheManager, RamCache};
+    use crate::CacheManager;
     use request_utils::task_id::TaskId;
-    use std::sync::Arc;
 
-    // Mock CacheManager for testing
+    // Mock CacheManager factory: CacheManager is a concrete struct (not a
+    // trait), so the mock materializes a real manager instance leaked to
+    // 'static lifetime, matching Updater::new's signature.
     struct MockCacheManager;
-    impl CacheManager for MockCacheManager {
-        fn get_cache_dir(&self) -> Option<String> {
-            Some("./test_cache".to_string())
-        }
-    }
 
     impl MockCacheManager {
-        fn new() -> &'static Self {
-            Box::leak(Box::new(Self))
+        fn mock() -> &'static CacheManager {
+            Box::leak(Box::new(CacheManager::new()))
         }
     }
 
@@ -45,10 +41,10 @@ mod ut_update {
     #[test]
     fn ut_updater_new() {
         let task_id = TaskId::new("test_id".to_string());
-        let cache_manager = MockCacheManager::new();
+        let cache_manager = MockCacheManager::mock();
         let updater = Updater::new(task_id.clone(), cache_manager);
 
-        assert_eq!(updater.task_id, task_id);
+        assert!(updater.task_id == task_id);
         assert!(updater.cache.is_none());
     }
 
@@ -65,7 +61,7 @@ mod ut_update {
     #[test]
     fn ut_updater_cache_finish_empty() {
         let task_id = TaskId::new("test_id".to_string());
-        let cache_manager = MockCacheManager::new();
+        let cache_manager = MockCacheManager::mock();
         let mut updater = Updater::new(task_id.clone(), cache_manager);
 
         let result = updater.cache_finish();
@@ -85,7 +81,7 @@ mod ut_update {
     #[test]
     fn ut_updater_cache_receive_basic() {
         let task_id = TaskId::new("test_id".to_string());
-        let cache_manager = MockCacheManager::new();
+        let cache_manager = MockCacheManager::mock();
         let mut updater = Updater::new(task_id.clone(), cache_manager);
         let test_data = b"test_data";
 
@@ -107,7 +103,7 @@ mod ut_update {
     #[test]
     fn ut_updater_cache_receive_multiple() {
         let task_id = TaskId::new("test_id".to_string());
-        let cache_manager = MockCacheManager::new();
+        let cache_manager = MockCacheManager::mock();
         let mut updater = Updater::new(task_id.clone(), cache_manager);
         let data1 = b"chunk1";
         let data2 = b"chunk2";
@@ -133,7 +129,7 @@ mod ut_update {
     #[test]
     fn ut_updater_reset_cache() {
         let task_id = TaskId::new("test_id".to_string());
-        let cache_manager = MockCacheManager::new();
+        let cache_manager = MockCacheManager::mock();
         let mut updater = Updater::new(task_id.clone(), cache_manager);
 
         updater.cache_receive(b"test", || Some(4));
@@ -156,7 +152,7 @@ mod ut_update {
     #[test]
     fn ut_updater_cache_receive_empty_data() {
         let task_id = TaskId::new("test_id".to_string());
-        let cache_manager = MockCacheManager::new();
+        let cache_manager = MockCacheManager::mock();
         let mut updater = Updater::new(task_id.clone(), cache_manager);
 
         updater.cache_receive(b"", || Some(0));
@@ -177,7 +173,7 @@ mod ut_update {
     #[test]
     fn ut_updater_cache_finish_populated() {
         let task_id = TaskId::new("test_id".to_string());
-        let cache_manager = MockCacheManager::new();
+        let cache_manager = MockCacheManager::mock();
         let mut updater = Updater::new(task_id.clone(), cache_manager);
         let test_data = b"test_data";
 

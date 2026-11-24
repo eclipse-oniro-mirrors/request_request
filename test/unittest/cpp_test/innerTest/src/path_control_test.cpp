@@ -31,6 +31,20 @@ using namespace OHOS::Request;
 #undef private
 #undef protected
 
+namespace {
+// Pure in-process ACL stub. libstorage_manager_acl is a shared library, so
+// this executable-local definition resolves the references from path_control
+// at static link time and no storage daemon is ever contacted.
+int g_aclRet = 0;
+} // namespace
+
+namespace OHOS::StorageDaemon {
+int AclSetAccess(const std::string &targetFile, const std::string &entryTxt)
+{
+    return g_aclRet;
+}
+} // namespace OHOS::StorageDaemon
+
 class PathControlTest : public testing::Test {
 public:
     static void SetUpTestCase(void);
@@ -364,4 +378,185 @@ HWTEST_F(PathControlTest, PathControlTest014, TestSize.Level1)
     EXPECT_FALSE(PathControl::SubPathsToMap("/data/storage/el3/base/x"));
     PathControl::InsureMapAcl();
     ASSERT_TRUE(PathControl::CheckBelongAppBaseDir("/data/storage/el1/base"));
+}
+
+/**
+ * @tc.name: PathControlTest015
+ * @tc.desc: AddPathsToMap with the stubbed ACL records every el2 path level
+ *           and SubPathsToMap releases them down to the last reference; the
+ *           released levels leave no stale entry so the path can be added
+ *           and released again
+ * @tc.precon: NA
+ * @tc.step: 1. Point the ACL stub at success
+ *           2. Add a full el2 file path and check the result
+ *           3. Subtract the same path and check the result
+ *           4. Add and subtract the same path a second time
+ * @tc.expect: All four calls return true because the first round released
+ *             every level and nothing blocks a second round on the same path
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(PathControlTest, PathControlTest015, TestSize.Level1)
+{
+    g_aclRet = 0;
+    const std::string filepath = "/data/storage/el2/base/heap/file015";
+    EXPECT_TRUE(PathControl::AddPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::SubPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::AddPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::SubPathsToMap(filepath));
+}
+
+/**
+ * @tc.name: PathControlTest016
+ * @tc.desc: A second add of the same path only bumps the reference count,
+ *           so the first sub keeps the ACL and the second one releases it
+ * @tc.precon: NA
+ * @tc.step: 1. Add the same el2 path twice with the ACL stub at success
+ *           2. Subtract the path once
+ *           3. Subtract the path again
+ * @tc.expect: Both adds return true; both subs return true while the second
+ *             one drives the count to zero and releases the ACL
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(PathControlTest, PathControlTest016, TestSize.Level1)
+{
+    g_aclRet = 0;
+    const std::string filepath = "/data/storage/el1/base/heap/file016";
+    EXPECT_TRUE(PathControl::AddPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::AddPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::SubPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::SubPathsToMap(filepath));
+}
+
+/**
+ * @tc.name: PathControlTest017
+ * @tc.desc: Subtracting a subpath whose stored level was added as a file
+ *           logs the file-type change and still releases the reference; the
+ *           failing sub leaves no entry behind so later subs keep failing
+ * @tc.precon: NA
+ * @tc.step: 1. Add the el2 base level alone, which is recorded as a file
+ *           2. Subtract a nested path whose walk marks the same level as a
+ *              directory
+ *           3. Repeat the same nested sub and then sub the base level alone
+ * @tc.expect: The add returns true; the first sub releases the base level at
+ *             zero count and then fails on the missing deeper levels; both
+ *             later subs return false because the stored entry is gone
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(PathControlTest, PathControlTest017, TestSize.Level1)
+{
+    g_aclRet = 0;
+    EXPECT_TRUE(PathControl::AddPathsToMap("/data/storage/el2/base"));
+    EXPECT_FALSE(PathControl::SubPathsToMap("/data/storage/el2/base/heap/file017"));
+    EXPECT_FALSE(PathControl::SubPathsToMap("/data/storage/el2/base/heap/file017"));
+    EXPECT_FALSE(PathControl::SubPathsToMap("/data/storage/el2/base"));
+}
+
+/**
+ * @tc.name: PathControlTest018
+ * @tc.desc: An ACL failure aborts the add with rollback and makes the final
+ *           sub release report failure
+ * @tc.precon: NA
+ * @tc.step: 1. Point the ACL stub at failure
+ *           2. Add an el2 file path
+ *           3. Point the ACL stub back at success, add the path, point it at
+ *              failure again and subtract the path
+ * @tc.expect: The failing add returns false; the failing sub of a
+ *             zero-count release returns false
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(PathControlTest, PathControlTest018, TestSize.Level1)
+{
+    g_aclRet = 1;
+    const std::string filepath = "/data/storage/el2/base/heap/file018";
+    EXPECT_FALSE(PathControl::AddPathsToMap(filepath));
+
+    g_aclRet = 0;
+    EXPECT_TRUE(PathControl::AddPathsToMap(filepath));
+    g_aclRet = 1;
+    EXPECT_FALSE(PathControl::SubPathsToMap(filepath));
+    g_aclRet = 0;
+}
+
+/**
+ * @tc.name: PathControlTest019
+ * @tc.desc: Subtracting a valid el5 path that was never added fails on the
+ *           first missing map entry, and the same path can be added and
+ *           released afterwards
+ * @tc.precon: NA
+ * @tc.step: 1. Subtract an el5 path that no add has recorded
+ *           2. Repeat the same sub
+ *           3. Add the same path and release it again
+ * @tc.expect: Both subs return false because the walk levels are missing
+ *             from the map; the add and sub return true because el5 belongs
+ *             to the application base dirs
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(PathControlTest, PathControlTest019, TestSize.Level1)
+{
+    g_aclRet = 0;
+    const std::string filepath = "/data/storage/el5/base/heap/file019";
+    EXPECT_FALSE(PathControl::SubPathsToMap(filepath));
+    EXPECT_FALSE(PathControl::SubPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::AddPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::SubPathsToMap(filepath));
+}
+
+/**
+ * @tc.name: PathControlTest020
+ * @tc.desc: InsureMapAcl re-applies the stubbed ACL for every mapped path
+ *           with a positive count
+ * @tc.precon: NA
+ * @tc.step: 1. Add an el2 file path with the ACL stub at success
+ *           2. Call InsureMapAcl
+ *           3. Release the path
+ * @tc.expect: All calls return true and InsureMapAcl completes without
+ *             crashing
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(PathControlTest, PathControlTest020, TestSize.Level1)
+{
+    g_aclRet = 0;
+    const std::string filepath = "/data/storage/el2/base/heap/file020";
+    EXPECT_TRUE(PathControl::AddPathsToMap(filepath));
+    PathControl::InsureMapAcl();
+    EXPECT_TRUE(PathControl::SubPathsToMap(filepath));
+}
+
+/**
+ * @tc.name: PathControlTest021
+ * @tc.desc: A double slash inside the path splits to the same levels at any
+ *           position, and the empty segment is skipped without changing the
+ *           recorded levels
+ * @tc.precon: NA
+ * @tc.step: 1. Add an el2 path with an empty segment after the storage prefix
+ *           2. Release it again
+ *           3. Add and release an el2 path with the empty segment between the
+ *              base and heap levels instead
+ * @tc.expect: All four calls return true; both empty-segment positions split
+ *             to the same clean level chain and round-trip through the map
+ * @tc.type: FUNC
+ * @tc.require: issueNumber
+ * @tc.level: Level 1
+ */
+HWTEST_F(PathControlTest, PathControlTest021, TestSize.Level1)
+{
+    g_aclRet = 0;
+    const std::string filepath = "/data/storage//el2/base/heap/file021";
+    EXPECT_TRUE(PathControl::AddPathsToMap(filepath));
+    EXPECT_TRUE(PathControl::SubPathsToMap(filepath));
+    const std::string nested = "/data/storage/el2/base//heap/file021b";
+    EXPECT_TRUE(PathControl::AddPathsToMap(nested));
+    EXPECT_TRUE(PathControl::SubPathsToMap(nested));
 }

@@ -336,3 +336,8 @@ extern "C" {
         ...
     ) -> i32;
 }
+
+#[cfg(test)]
+mod ut_wrapper {
+    include!("../tests/ut/ut_wrapper.rs");
+}
